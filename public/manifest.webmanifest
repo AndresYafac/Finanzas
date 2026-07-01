@@ -1,0 +1,20 @@
+{
+  "name": "FinTrack Pro",
+  "short_name": "FinTrack",
+  "description": "Sistema de gestión financiera",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1923",
+  "theme_color": "#0f1923",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/fintrack-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
