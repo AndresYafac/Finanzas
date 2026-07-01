@@ -187,6 +187,9 @@ function App() {
               await installPrompt.prompt();
               setInstallPrompt(null);
             }}>Instalar app</button>}
+            <button className="btn mobile-logout-btn" onClick={logout}>
+              <LogOut size={16} /> Salir
+            </button>
           </div>
         </div>
         {message && <div className="alert alert-danger">{message}</div>}

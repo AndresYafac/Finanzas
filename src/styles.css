@@ -68,6 +68,7 @@ textarea { width: 100%; min-height: 80px; padding: 10px 14px; border: 1.5px soli
 .topbar-left h2 { font-size: 17px; font-weight: 800; }
 .topbar-left p { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
+.mobile-logout-btn { display: none; }
 .page { padding: 24px; }
 .btn { padding: 8px 14px; border-radius: var(--radius); font-size: 13px; font-weight: 600; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); display: inline-flex; align-items: center; gap: 6px; }
 .btn:hover { border-color: var(--primary); color: var(--primary); }
@@ -138,7 +139,7 @@ tbody tr:hover { background: var(--bg); }
 .profile-name { font-size: 18px; font-weight: 800; }
 .muted { color: var(--text-muted); font-size: 13px; }
 .role-text { font-size: 12px; color: var(--primary); margin-top: 4px; font-weight: 800; }
-.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: center; justify-content: center; padding: 18px; }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 300; align-items: center; justify-content: center; padding: 18px; }
 .modal-overlay.open { display: flex; }
 .modal { background: var(--surface); border-radius: var(--radius-lg); width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
 .modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
@@ -794,6 +795,7 @@ tbody tr:hover {
   .topbar {
     position: relative;
     top: 0;
+    flex-direction: column;
     align-items: flex-start;
     margin: 12px 12px 0;
     padding: 16px;
@@ -817,6 +819,10 @@ tbody tr:hover {
   }
   .topbar-actions .btn {
     width: 100%;
+  }
+  .mobile-logout-btn {
+    display: inline-flex;
+    justify-content: center;
   }
 
   .page {
@@ -896,7 +902,7 @@ tbody tr:hover {
   }
 
   .modal-body {
-    padding: 20px;
+    padding: 20px 20px 96px;
   }
 
   .modal-footer {
