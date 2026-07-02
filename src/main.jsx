@@ -36,6 +36,9 @@ const money = (value) =>
     maximumFractionDigits: 2,
   })}`;
 const dateFmt = (value) => (value ? new Date(`${value}T00:00:00`).toLocaleDateString('es-PE') : '-');
+const REMEMBER_KEY = 'fintrack_remember_account';
+const REMEMBER_EMAIL_KEY = 'fintrack_remember_email';
+const LOCKED_KEY = 'fintrack_locked';
 
 let notifyHandler = null;
 let confirmHandler = null;
@@ -55,6 +58,22 @@ function createStoredClient() {
   return url && key ? createClient(url, key) : null;
 }
 
+function isMobileViewport() {
+  return window.matchMedia?.('(max-width: 760px)').matches;
+}
+
+function randomHex(bytes = 16) {
+  const values = new Uint8Array(bytes);
+  crypto.getRandomValues(values);
+  return Array.from(values, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function hashPin(pin, salt) {
+  const data = new TextEncoder().encode(`${salt}:${pin}`);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
 function App() {
   const [supabase, setSupabase] = React.useState(createStoredClient);
   const [session, setSession] = React.useState(null);
@@ -65,6 +84,7 @@ function App() {
   const [toast, setToast] = React.useState(null);
   const [confirmState, setConfirmState] = React.useState(null);
   const [installPrompt, setInstallPrompt] = React.useState(null);
+  const [locked, setLocked] = React.useState(() => localStorage.getItem(LOCKED_KEY) === '1');
 
   React.useEffect(() => {
     notifyHandler = ({ message: nextMessage, type }) => {
@@ -108,8 +128,30 @@ function App() {
     loadProfile();
   }, [supabase, session, refreshKey]);
 
+  React.useEffect(() => {
+    if (locked && profile && !profile.pin_hash) {
+      localStorage.removeItem(LOCKED_KEY);
+      setLocked(false);
+    }
+  }, [locked, profile]);
+
   if (!supabase) return <Setup onReady={setSupabase} />;
   if (!session) return <Auth supabase={supabase} message={message} setMessage={setMessage} />;
+  if (locked && !profile) return <AuthCard title="Desbloquear FinTrack"><p className="muted">Cargando cuenta recordada...</p></AuthCard>;
+  if (locked && profile?.pin_hash) {
+    return <PinUnlock supabase={supabase} profile={profile} onUnlock={() => {
+      localStorage.removeItem(LOCKED_KEY);
+      setLocked(false);
+    }} onFullLogout={async () => {
+      localStorage.removeItem(LOCKED_KEY);
+      localStorage.removeItem(REMEMBER_KEY);
+      localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      await supabase.auth.signOut();
+      setSession(null);
+      setProfile(null);
+      setLocked(false);
+    }} />;
+  }
 
   const isAdmin = profile?.role === 'admin';
   const pages = [
@@ -131,7 +173,14 @@ function App() {
   ];
 
   async function logout() {
+    const canLock = isMobileViewport() && localStorage.getItem(REMEMBER_KEY) === '1' && profile?.pin_hash;
+    if (canLock) {
+      localStorage.setItem(LOCKED_KEY, '1');
+      setLocked(true);
+      return;
+    }
     await supabase.auth.signOut();
+    localStorage.removeItem(LOCKED_KEY);
     setSession(null);
     setProfile(null);
   }
@@ -258,8 +307,9 @@ function Setup({ onReady }) {
 
 function Auth({ supabase, message, setMessage }) {
   const [mode, setMode] = React.useState('login');
-  const [form, setForm] = React.useState({ nombre: '', apellido: '', email: '', password: '' });
+  const [form, setForm] = React.useState({ nombre: '', apellido: '', email: localStorage.getItem(REMEMBER_EMAIL_KEY) || '', password: '' });
   const [showPassword, setShowPassword] = React.useState(false);
+  const [remember, setRemember] = React.useState(localStorage.getItem(REMEMBER_KEY) === '1');
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
   async function submit(event) {
@@ -268,6 +318,16 @@ function Auth({ supabase, message, setMessage }) {
     if (mode === 'login') {
       const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
       if (error) setMessage(error.message);
+      if (!error) {
+        if (remember) {
+          localStorage.setItem(REMEMBER_KEY, '1');
+          localStorage.setItem(REMEMBER_EMAIL_KEY, form.email.trim());
+        } else {
+          localStorage.removeItem(REMEMBER_KEY);
+          localStorage.removeItem(REMEMBER_EMAIL_KEY);
+          localStorage.removeItem(LOCKED_KEY);
+        }
+      }
       return;
     }
     const { error } = await supabase.auth.signUp({
@@ -306,8 +366,63 @@ function Auth({ supabase, message, setMessage }) {
           minLength={8}
           rightElement={<button className="input-action" type="button" onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
         />
+        {mode === 'login' && (
+          <label className="check-row">
+            <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+            <span>Recordar cuenta y usar PIN en este celular</span>
+          </label>
+        )}
         <button className="btn-full">{mode === 'login' ? 'Entrar al sistema' : 'Crear cuenta de cliente'}</button>
         {message && <div className="auth-error">{message}</div>}
+      </form>
+    </AuthCard>
+  );
+}
+
+function PinUnlock({ profile, onUnlock, onFullLogout }) {
+  const [pin, setPin] = React.useState('');
+  const [error, setError] = React.useState('');
+
+  async function submit(event) {
+    event.preventDefault();
+    setError('');
+    if (!/^\d{6}$/.test(pin)) {
+      setError('Ingresa tu PIN de 6 dígitos.');
+      return;
+    }
+    const nextHash = await hashPin(pin, profile.pin_salt);
+    if (nextHash !== profile.pin_hash) {
+      setError('PIN incorrecto.');
+      setPin('');
+      return;
+    }
+    onUnlock();
+  }
+
+  return (
+    <AuthCard title="Desbloquear FinTrack">
+      <form onSubmit={submit}>
+        <div className="pin-user">
+          <div className="user-avatar">{initials(profile, profile?.email_contacto)}</div>
+          <div>
+            <strong>{fullName(profile) || 'Cuenta recordada'}</strong>
+            <span>Ingresa tu PIN para continuar</span>
+          </div>
+        </div>
+        <Field
+          label="PIN de 6 dígitos"
+          type="password"
+          value={pin}
+          onChange={(value) => setPin(value.replace(/\D/g, '').slice(0, 6))}
+          required
+          minLength={6}
+          inputMode="numeric"
+          pattern="\d{6}"
+          placeholder="------"
+        />
+        <button className="btn-full">Entrar con PIN</button>
+        {error && <div className="auth-error">{error}</div>}
+        <button type="button" className="link-button" onClick={onFullLogout}>Cerrar sesión completa</button>
       </form>
     </AuthCard>
   );
@@ -357,12 +472,12 @@ function AppDialogs({ toast, onCloseToast, confirmState, setConfirmState }) {
   );
 }
 
-function Field({ label, type = 'text', value, onChange, required = false, minLength, placeholder, rightElement }) {
+function Field({ label, type = 'text', value, onChange, required = false, minLength, placeholder, rightElement, ...inputProps }) {
   return (
     <div className="form-group">
       <label>{label}</label>
       <div className={rightElement ? 'input-wrap' : ''}>
-        <input type={type} value={value} required={required} minLength={minLength} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+        <input type={type} value={value} required={required} minLength={minLength} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} {...inputProps} />
         {rightElement}
       </div>
     </div>
@@ -1085,7 +1200,9 @@ function Reportes({ supabase, user }) {
 
 function Perfil({ supabase, user, profile, onSaved }) {
   const [form, setForm] = React.useState({ nombre: '', apellido: '', tipo_doc: 'DNI', documento: '', email_contacto: '', telefono: '', direccion: '', empresa: '', moneda: 'PEN' });
+  const [pinForm, setPinForm] = React.useState({ pin: '', confirm: '' });
   const [status, setStatus] = React.useState('');
+  const [pinStatus, setPinStatus] = React.useState('');
   React.useEffect(() => setForm({
     nombre: profile?.nombre || '',
     apellido: profile?.apellido || '',
@@ -1109,21 +1226,60 @@ function Perfil({ supabase, user, profile, onSaved }) {
     setStatus('Perfil actualizado correctamente.');
     onSaved();
   }
-  return <div className="profile-section"><div className="card"><div className="card-header"><h3>Información personal</h3></div><form className="card-body" onSubmit={save}>
-    <div className="avatar-upload"><div className="avatar-big">{initials(profile, user.email)}</div><div><div className="profile-name">{fullName(profile) || user.email}</div><div className="muted">{user.email}</div><div className="role-text">{profile?.role === 'admin' ? 'Administrador' : 'Usuario'}</div></div></div>
-    <div className="form-row"><Field label="Nombre" value={form.nombre} onChange={(v) => setForm({ ...form, nombre: v })} /><Field label="Apellido" value={form.apellido} onChange={(v) => setForm({ ...form, apellido: v })} /></div>
-    <div className="form-row">
-      <SelectField label="Tipo de documento" value={form.tipo_doc} onChange={(v) => setForm({ ...form, tipo_doc: v })}><option>DNI</option><option>RUC</option><option>CE</option><option>Pasaporte</option></SelectField>
-      <Field label="Documento" value={form.documento} onChange={(v) => setForm({ ...form, documento: v })} />
-    </div>
-    <Field label="Email de contacto" type="email" value={form.email_contacto} onChange={(v) => setForm({ ...form, email_contacto: v })} />
-    <Field label="Teléfono" value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} />
-    <Field label="Dirección" value={form.direccion} onChange={(v) => setForm({ ...form, direccion: v })} />
-    <Field label="Empresa / Negocio" value={form.empresa} onChange={(v) => setForm({ ...form, empresa: v })} />
-    <SelectField label="Moneda predeterminada" value={form.moneda} onChange={(v) => setForm({ ...form, moneda: v })}><option value="PEN">Soles (S/)</option><option value="USD">Dólares ($)</option><option value="EUR">Euros (€)</option></SelectField>
-    {status && <div className={`connection-status ${status.includes('correctamente') ? 'success' : ''}`}>{status}</div>}
-    <button className="btn btn-primary"><Check size={16} />Guardar cambios</button>
-  </form></div></div>;
+  async function savePin(event) {
+    event.preventDefault();
+    setPinStatus('');
+    if (!/^\d{6}$/.test(pinForm.pin)) {
+      setPinStatus('El PIN debe tener exactamente 6 dígitos.');
+      return;
+    }
+    if (pinForm.pin !== pinForm.confirm) {
+      setPinStatus('La confirmación del PIN no coincide.');
+      return;
+    }
+    const salt = randomHex(16);
+    const pin_hash = await hashPin(pinForm.pin, salt);
+    const { error } = await supabase.from('profiles').update({
+      pin_hash,
+      pin_salt: salt,
+      pin_updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', user.id);
+    if (error) {
+      setPinStatus(error.message);
+      return;
+    }
+    setPinForm({ pin: '', confirm: '' });
+    setPinStatus('PIN actualizado correctamente.');
+    onSaved();
+  }
+  const setPinField = (field, value) => setPinForm((current) => ({ ...current, [field]: value.replace(/\D/g, '').slice(0, 6) }));
+  return <div className="profile-section">
+    <div className="card"><div className="card-header"><h3>Información personal</h3></div><form className="card-body" onSubmit={save}>
+      <div className="avatar-upload"><div className="avatar-big">{initials(profile, user.email)}</div><div><div className="profile-name">{fullName(profile) || user.email}</div><div className="muted">{user.email}</div><div className="role-text">{profile?.role === 'admin' ? 'Administrador' : 'Usuario'}</div></div></div>
+      <div className="form-row"><Field label="Nombre" value={form.nombre} onChange={(v) => setForm({ ...form, nombre: v })} /><Field label="Apellido" value={form.apellido} onChange={(v) => setForm({ ...form, apellido: v })} /></div>
+      <div className="form-row">
+        <SelectField label="Tipo de documento" value={form.tipo_doc} onChange={(v) => setForm({ ...form, tipo_doc: v })}><option>DNI</option><option>RUC</option><option>CE</option><option>Pasaporte</option></SelectField>
+        <Field label="Documento" value={form.documento} onChange={(v) => setForm({ ...form, documento: v })} />
+      </div>
+      <Field label="Email de contacto" type="email" value={form.email_contacto} onChange={(v) => setForm({ ...form, email_contacto: v })} />
+      <Field label="Teléfono" value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} />
+      <Field label="Dirección" value={form.direccion} onChange={(v) => setForm({ ...form, direccion: v })} />
+      <Field label="Empresa / Negocio" value={form.empresa} onChange={(v) => setForm({ ...form, empresa: v })} />
+      <SelectField label="Moneda predeterminada" value={form.moneda} onChange={(v) => setForm({ ...form, moneda: v })}><option value="PEN">Soles (S/)</option><option value="USD">Dólares ($)</option><option value="EUR">Euros (€)</option></SelectField>
+      {status && <div className={`connection-status ${status.includes('correctamente') ? 'success' : ''}`}>{status}</div>}
+      <button className="btn btn-primary"><Check size={16} />Guardar cambios</button>
+    </form></div>
+    <div className="card pin-card"><div className="card-header"><h3>PIN móvil</h3></div><form className="card-body" onSubmit={savePin}>
+      <p className="muted">Crea un PIN de 6 dígitos para desbloquear la app en este celular cuando uses “Recordar cuenta”.</p>
+      <div className="form-row">
+        <Field label="Nuevo PIN" type="password" value={pinForm.pin} onChange={(v) => setPinField('pin', v)} inputMode="numeric" pattern="\d{6}" placeholder="------" required minLength={6} />
+        <Field label="Confirmar PIN" type="password" value={pinForm.confirm} onChange={(v) => setPinField('confirm', v)} inputMode="numeric" pattern="\d{6}" placeholder="------" required minLength={6} />
+      </div>
+      {pinStatus && <div className={`connection-status ${pinStatus.includes('correctamente') ? 'success' : ''}`}>{pinStatus}</div>}
+      <button className="btn btn-primary"><Check size={16} />{profile?.pin_hash ? 'Cambiar PIN' : 'Crear PIN'}</button>
+    </form></div>
+  </div>;
 }
 
 function Modal({ open, title, onClose, children }) {
