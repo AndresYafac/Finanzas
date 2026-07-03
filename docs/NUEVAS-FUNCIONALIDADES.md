@@ -7,6 +7,7 @@ Ejecuta este archivo completo en Supabase SQL Editor:
 ```txt
 ../supabase/sql/FINTRACK-FEATURES-SCHEMA.sql
 ../supabase/sql/DEUDAS-PRESTAMOS-SCHEMA.sql
+../supabase/sql/PRESTAMOS-RECIBIDOS-SCHEMA.sql
 ```
 
 Sin ese SQL, las pantallas nuevas pueden abrir, pero Supabase devolvera errores porque aun no existen las tablas `presupuestos`, `metas` y `auditoria`.
@@ -46,6 +47,14 @@ Sin ese SQL, las pantallas nuevas pueden abrir, pero Supabase devolvera errores 
 - Cobros de prestamos:
   - se pueden editar y eliminar;
   - al editar/eliminar se revierte el saldo de cuenta y el monto cobrado.
+- Prestamos recibidos:
+  - registra dinero que terceros te prestaron;
+  - permite modo antiguo sin mover saldo actual;
+  - permite modo nuevo con ingreso a cuenta.
+- Pagos de prestamos recibidos:
+  - descuenta dinero de tu cuenta;
+  - reduce el saldo pendiente que debes;
+  - permite editar y eliminar con reversion contable.
 - Todas las tablas usan paginacion.
 - Preparacion para adjuntos:
   - columnas `comprobante_url` en `movimientos` y `pagos`.

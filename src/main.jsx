@@ -123,6 +123,8 @@ function App() {
       ['deudas', 'Deudas', CreditCard, true],
       ['prestamos', 'Préstamos', TrendingDown, true],
       ['cobros-prestamos', 'Cobros préstamos', TrendingUp, true],
+      ['prestamos-recibidos', 'Préstamos recibidos', Banknote, true],
+      ['pagos-prestamos-recibidos', 'Pagos préstamos recibidos', TrendingDown, true],
       ['pagos', 'Pagos', Banknote, true],
       ['movimientos', 'Ingresos / Egresos', Wallet, true],
       ['presupuestos', 'Presupuestos', ClipboardList, true],
@@ -216,6 +218,8 @@ function App() {
           {page === 'deudas' && <Deudas supabase={supabase} user={session.user} isAdmin={isAdmin} />}
           {page === 'prestamos' && <Prestamos supabase={supabase} user={session.user} />}
           {page === 'cobros-prestamos' && <CobrosPrestamos supabase={supabase} user={session.user} />}
+          {page === 'prestamos-recibidos' && <PrestamosRecibidos supabase={supabase} user={session.user} />}
+          {page === 'pagos-prestamos-recibidos' && <PagosPrestamosRecibidos supabase={supabase} user={session.user} />}
           {page === 'pagos' && <Pagos supabase={supabase} user={session.user} isAdmin={isAdmin} />}
           {page === 'movimientos' && <Movimientos supabase={supabase} user={session.user} isAdmin={isAdmin} />}
           {page === 'presupuestos' && <Presupuestos supabase={supabase} user={session.user} />}
@@ -264,6 +268,8 @@ function pageTitle(page, isAdmin) {
     deudas: ['Deudas', 'Ventas, servicios y pendientes por cobrar'],
     prestamos: ['Préstamos', 'Dinero desembolsado a clientes'],
     'cobros-prestamos': ['Cobros de préstamos', 'Pagos recibidos por préstamos'],
+    'prestamos-recibidos': ['Préstamos recibidos', 'Dinero que te prestaron a ti'],
+    'pagos-prestamos-recibidos': ['Pagos de préstamos recibidos', 'Cuotas que pagas a tus acreedores'],
     pagos: ['Pagos', 'Historial de pagos recibidos'],
     movimientos: ['Ingresos y egresos', 'Movimientos generales de caja'],
     presupuestos: ['Presupuestos', 'Control mensual por categoría'],
@@ -1136,6 +1142,231 @@ function CobrosPrestamos({ supabase, user }) {
             <div className="form-group"><label>Notas</label><textarea value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>
           </div>
           <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><TrendingUp size={16} />{editingId ? 'Actualizar cobro' : 'Registrar cobro'}</button></div>
+        </form>
+      </Modal>
+    </>
+  );
+}
+
+function PrestamosRecibidos({ supabase, user }) {
+  const emptyForm = { acreedor: '', descripcion: '', monto_original: '', saldo_inicial: '', interes: '0', es_antiguo: true, cuenta_ingreso_id: '', fecha_inicio: today(), fecha_vencimiento: '', notas: '' };
+  const [rows, setRows] = React.useState([]);
+  const [cuentas, setCuentas] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [form, setForm] = React.useState(emptyForm);
+  const load = React.useCallback(async () => {
+    const [prestamosQ, cuentasQ] = await Promise.all([
+      supabase.from('prestamos_recibidos').select('*,cuentas(banco,tipo)').eq('admin_id', user.id).order('fecha_inicio', { ascending: false }),
+      supabase.from('cuentas').select('*').eq('admin_id', user.id).order('banco'),
+    ]);
+    setRows(prestamosQ.data || []);
+    setCuentas(cuentasQ.data || []);
+  }, [supabase, user.id]);
+  React.useEffect(() => { load(); }, [load]);
+  function estado(row) {
+    const pendiente = Number(row.saldo_inicial || 0) - Number(row.monto_pagado || 0);
+    if (pendiente <= 0) return 'pagado';
+    if (!row.fecha_vencimiento) return 'al_dia';
+    const diff = (new Date(`${row.fecha_vencimiento}T00:00:00`) - new Date(new Date().toDateString())) / 86400000;
+    if (diff < 0) return 'vencido';
+    if (diff <= 7) return 'por_vencer';
+    return 'al_dia';
+  }
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setOpen(true);
+  }
+  function openEdit(row) {
+    setEditingId(row.id);
+    setForm({
+      acreedor: row.acreedor || '',
+      descripcion: row.descripcion || '',
+      monto_original: row.monto_original ?? '',
+      saldo_inicial: row.saldo_inicial ?? '',
+      interes: row.interes ?? '0',
+      es_antiguo: Boolean(row.es_antiguo),
+      cuenta_ingreso_id: row.cuenta_ingreso_id || '',
+      fecha_inicio: row.fecha_inicio || today(),
+      fecha_vencimiento: row.fecha_vencimiento || '',
+      notas: row.notas || '',
+    });
+    setOpen(true);
+  }
+  async function remove(row) {
+    if (!(await confirmAction(`Eliminar préstamo recibido de ${row.acreedor || ''}?`))) return;
+    const { error } = await supabase.rpc('eliminar_prestamo_recibido', { p_prestamo_id: row.id });
+    if (error) return notify(error.message);
+    load();
+  }
+  async function save(event) {
+    event.preventDefault();
+    const saldo = form.saldo_inicial === '' ? form.monto_original : form.saldo_inicial;
+    const payload = {
+      p_acreedor: form.acreedor,
+      p_descripcion: form.descripcion,
+      p_monto_original: Number(form.monto_original || 0),
+      p_saldo_inicial: Number(saldo || 0),
+      p_interes: Number(form.interes || 0),
+      p_es_antiguo: Boolean(form.es_antiguo),
+      p_cuenta_ingreso_id: form.es_antiguo ? null : form.cuenta_ingreso_id || null,
+      p_fecha_inicio: form.fecha_inicio || today(),
+      p_fecha_vencimiento: form.fecha_vencimiento || null,
+      p_notas: form.notas || null,
+    };
+    if (!payload.p_acreedor || !payload.p_descripcion || !payload.p_monto_original) return;
+    if (!payload.p_es_antiguo && !payload.p_cuenta_ingreso_id) return notify('Selecciona la cuenta donde recibiste el dinero.');
+    const { error } = editingId
+      ? await supabase.rpc('actualizar_prestamo_recibido', { p_prestamo_id: editingId, ...payload })
+      : await supabase.rpc('registrar_prestamo_recibido', payload);
+    if (error) return notify(error.message);
+    setForm(emptyForm);
+    setEditingId(null);
+    setOpen(false);
+    load();
+  }
+  return (
+    <>
+      <TableSection
+        title="Préstamos recibidos"
+        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo préstamo recibido</button>}
+        columns={['Acreedor', 'Descripción', 'Tipo', 'Monto original', 'Pagado', 'Pendiente', 'Vencimiento', 'Estado']}
+        rows={rows.map((row) => {
+          const pendiente = Number(row.saldo_inicial || 0) - Number(row.monto_pagado || 0);
+          return [row.acreedor, row.descripcion, row.es_antiguo ? 'Antiguo sin saldo' : `Ingreso a ${row.cuentas?.banco || '-'}`, money(row.monto_original), money(row.monto_pagado), money(pendiente), dateFmt(row.fecha_vencimiento), badge(estado(row)), <RowActions onEdit={() => openEdit(row)} onDelete={() => remove(row)} />];
+        })}
+      />
+      <Modal open={open} title={editingId ? 'Editar préstamo recibido' : 'Nuevo préstamo recibido'} onClose={() => setOpen(false)}>
+        <form onSubmit={save}>
+          <div className="modal-body">
+            <div className="alert alert-warning">Para préstamos antiguos que ya gastaste, marca “antiguo” y registra solo el saldo pendiente. No se moverá ninguna cuenta.</div>
+            <label className="check-row">
+              <input type="checkbox" checked={form.es_antiguo} onChange={(event) => setForm({ ...form, es_antiguo: event.target.checked, cuenta_ingreso_id: '' })} />
+              <span>Préstamo antiguo sin mover saldo actual</span>
+            </label>
+            <Field label="Acreedor" value={form.acreedor} onChange={(v) => setForm({ ...form, acreedor: v })} placeholder="Banco, familiar, proveedor..." required />
+            <Field label="Descripción" value={form.descripcion} onChange={(v) => setForm({ ...form, descripcion: v })} required />
+            {!form.es_antiguo && (
+              <SelectField label="Cuenta donde recibiste el dinero" value={form.cuenta_ingreso_id} onChange={(v) => setForm({ ...form, cuenta_ingreso_id: v })}>
+                <option value="">Seleccionar cuenta...</option>
+                {cuentas.map((c) => <option key={c.id} value={c.id}>{c.banco} - {c.tipo} - {money(c.saldo)}</option>)}
+              </SelectField>
+            )}
+            <div className="form-row">
+              <Field label="Monto original" type="number" value={form.monto_original} onChange={(v) => setForm({ ...form, monto_original: v, saldo_inicial: form.saldo_inicial || v })} required />
+              <Field label="Saldo pendiente inicial" type="number" value={form.saldo_inicial} onChange={(v) => setForm({ ...form, saldo_inicial: v })} required />
+            </div>
+            <div className="form-row">
+              <Field label="Interés (%)" type="number" value={form.interes} onChange={(v) => setForm({ ...form, interes: v })} />
+              <Field label="Fecha préstamo" type="date" value={form.fecha_inicio} onChange={(v) => setForm({ ...form, fecha_inicio: v })} />
+            </div>
+            <Field label="Vencimiento" type="date" value={form.fecha_vencimiento} onChange={(v) => setForm({ ...form, fecha_vencimiento: v })} />
+            <div className="form-group"><label>Notas</label><textarea value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>
+          </div>
+          <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />Guardar</button></div>
+        </form>
+      </Modal>
+    </>
+  );
+}
+
+function PagosPrestamosRecibidos({ supabase, user }) {
+  const emptyForm = { prestamo_id: '', cuenta_id: '', monto: '', metodo: 'Transferencia', referencia: '', fecha: today(), notas: '' };
+  const [pagos, setPagos] = React.useState([]);
+  const [prestamos, setPrestamos] = React.useState([]);
+  const [cuentas, setCuentas] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [form, setForm] = React.useState(emptyForm);
+  const load = React.useCallback(async () => {
+    const [pagosQ, prestamosQ, cuentasQ] = await Promise.all([
+      supabase.from('pagos_prestamos_recibidos').select('*,prestamos_recibidos(acreedor,descripcion),cuentas(banco)').eq('admin_id', user.id).order('fecha', { ascending: false }),
+      supabase.from('prestamos_recibidos').select('*').eq('admin_id', user.id).order('fecha_inicio', { ascending: false }),
+      supabase.from('cuentas').select('*').eq('admin_id', user.id).order('banco'),
+    ]);
+    setPagos(pagosQ.data || []);
+    setPrestamos(prestamosQ.data || []);
+    setCuentas(cuentasQ.data || []);
+  }, [supabase, user.id]);
+  React.useEffect(() => { load(); }, [load]);
+  const prestamosPendientes = prestamos.filter((p) => editingId || Number(p.saldo_inicial || 0) - Number(p.monto_pagado || 0) > 0);
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setOpen(true);
+  }
+  function openEdit(row) {
+    setEditingId(row.id);
+    setForm({
+      prestamo_id: row.prestamo_id || '',
+      cuenta_id: row.cuenta_id || '',
+      monto: row.monto ?? '',
+      metodo: row.metodo || 'Transferencia',
+      referencia: row.referencia || '',
+      fecha: row.fecha || today(),
+      notas: row.notas || '',
+    });
+    setOpen(true);
+  }
+  async function remove(row) {
+    if (!(await confirmAction('Eliminar este pago? Se revertirá el saldo de la cuenta y el pendiente.'))) return;
+    const { error } = await supabase.rpc('eliminar_pago_prestamo_recibido', { p_pago_id: row.id });
+    if (error) return notify(error.message);
+    load();
+  }
+  async function save(event) {
+    event.preventDefault();
+    const payload = {
+      p_prestamo_id: form.prestamo_id,
+      p_cuenta_id: form.cuenta_id || null,
+      p_monto: Number(form.monto || 0),
+      p_metodo: form.metodo,
+      p_referencia: form.referencia || null,
+      p_fecha: form.fecha,
+      p_notas: form.notas || null,
+    };
+    if (!payload.p_prestamo_id || !payload.p_monto || !payload.p_fecha) return;
+    const { error } = editingId
+      ? await supabase.rpc('actualizar_pago_prestamo_recibido', { p_pago_id: editingId, ...payload })
+      : await supabase.rpc('registrar_pago_prestamo_recibido', payload);
+    if (error) return notify(error.message);
+    setForm(emptyForm);
+    setEditingId(null);
+    setOpen(false);
+    load();
+  }
+  return (
+    <>
+      <TableSection
+        title="Pagos de préstamos recibidos"
+        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo pago</button>}
+        columns={['Fecha', 'Acreedor', 'Préstamo', 'Monto', 'Método', 'Cuenta origen']}
+        rows={pagos.map((p) => [dateFmt(p.fecha), p.prestamos_recibidos?.acreedor || '-', p.prestamos_recibidos?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
+      />
+      <Modal open={open} title={editingId ? 'Editar pago de préstamo recibido' : 'Nuevo pago de préstamo recibido'} onClose={() => setOpen(false)}>
+        <form onSubmit={save}>
+          <div className="modal-body">
+            <div className="alert alert-warning">Esta operación descuenta dinero de tu cuenta y reduce el préstamo que debes.</div>
+            <SelectField label="Préstamo recibido" value={form.prestamo_id} onChange={(v) => setForm({ ...form, prestamo_id: v })}>
+              <option value="">Seleccionar préstamo...</option>
+              {prestamosPendientes.map((p) => <option key={p.id} value={p.id}>{p.acreedor} - {p.descripcion} - pendiente {money(Number(p.saldo_inicial || 0) - Number(p.monto_pagado || 0))}</option>)}
+            </SelectField>
+            <SelectField label="Cuenta origen del pago" value={form.cuenta_id} onChange={(v) => setForm({ ...form, cuenta_id: v })}>
+              <option value="">Sin cuenta</option>
+              {cuentas.map((c) => <option key={c.id} value={c.id}>{c.banco} - {c.tipo} - {money(c.saldo)}</option>)}
+            </SelectField>
+            <div className="form-row">
+              <Field label="Monto pagado" type="number" value={form.monto} onChange={(v) => setForm({ ...form, monto: v })} required />
+              <Field label="Fecha" type="date" value={form.fecha} onChange={(v) => setForm({ ...form, fecha: v })} required />
+            </div>
+            <div className="form-row">
+              <SelectField label="Método" value={form.metodo} onChange={(v) => setForm({ ...form, metodo: v })}><option>Efectivo</option><option>Transferencia</option><option>Yape</option><option>Plin</option><option>Depósito</option></SelectField>
+              <Field label="Referencia" value={form.referencia} onChange={(v) => setForm({ ...form, referencia: v })} />
+            </div>
+            <div className="form-group"><label>Notas</label><textarea value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>
+          </div>
+          <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />Guardar</button></div>
         </form>
       </Modal>
     </>
