@@ -92,6 +92,14 @@ textarea { width: 100%; min-height: 80px; padding: 10px 14px; border: 1.5px soli
 .metric-value { font-size: 26px; font-weight: 900; color: var(--text); line-height: 1.05; }
 .metric-change { font-size: 12px; margin-top: 6px; font-weight: 600; }
 .metric-change.neutral { color: var(--text-muted); }
+.mini-chart { display: grid; gap: 7px; margin-top: 14px; }
+.mini-chart-row { display: grid; grid-template-columns: minmax(56px, .8fr) 1.4fr auto; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
+.mini-chart-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-chart-row b { color: var(--text); font-size: 11px; white-space: nowrap; }
+.mini-chart-track { height: 8px; overflow: hidden; border-radius: 999px; background: #e7eef5; }
+.mini-chart-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), #67caa1); }
+.mini-chart-track i.danger { background: linear-gradient(90deg, #e24b4a, #f39a44); }
+.mini-chart-empty { margin-top: 14px; padding: 12px; border-radius: 12px; background: #f3f7fa; color: var(--text-muted); font-size: 12px; text-align: center; }
 .danger-text { color: var(--danger); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
@@ -117,6 +125,10 @@ tbody tr:hover { background: var(--bg); }
 .form-card { margin-bottom: 20px; }
 .action-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
 .table-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12px; }
+.pagination-actions { display: flex; align-items: center; gap: 8px; }
+.pagination-size { width: auto; min-width: 68px; padding: 6px 28px 6px 10px; border-radius: 10px; font-size: 12px; }
+.pagination .btn:disabled { cursor: not-allowed; opacity: .45; transform: none; }
 .row-actions { display: inline-flex; align-items: center; gap: 6px; }
 .btn-icon { width: 34px; min-height: 34px; padding: 0; }
 .btn-danger { color: var(--danger); border-color: #f3c9c9; background: var(--danger-light); }
@@ -140,6 +152,17 @@ tbody tr:hover { background: var(--bg); }
 .transfer-card { margin-top: 20px; }
 .transfer-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .transfer-row strong { color: var(--primary-dark); white-space: nowrap; }
+.dashboard-extra { margin-top: 20px; }
+.progress-cell { display: flex; align-items: center; gap: 10px; min-width: 150px; }
+.progress-cell b { min-width: 42px; font-size: 12px; color: var(--text-muted); }
+.progress-bar { width: 100%; height: 10px; overflow: hidden; border-radius: 999px; background: #e8eef4; }
+.progress-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), #60c99e); }
+.backup-button { margin-top: 16px; }
+.backup-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.report-spacer { height: 20px; }
+.loan-disbursement-box { margin: 14px 0 16px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: #f8fbfd; }
+.loan-disbursement-box .check-row { margin: 0 0 12px; }
+.loan-disbursement-box .muted { margin-top: 8px; line-height: 1.4; }
 .profile-section { max-width: 600px; }
 .pin-card { margin-top: 18px; }
 .avatar-upload { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
@@ -485,8 +508,18 @@ textarea:focus {
 
 .page {
   width: 100%;
-  max-width: 1480px;
   padding: 22px;
+}
+
+.page-perfil,
+.page-config {
+  display: flex;
+  justify-content: center;
+}
+
+.page-perfil .profile-section,
+.page-config .profile-section {
+  width: min(720px, 100%);
 }
 
 .btn {
@@ -579,11 +612,13 @@ textarea:focus {
 
 .grid-2 {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
   gap: 18px;
 }
 
 .grid-3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
   gap: 18px;
 }
 
@@ -882,6 +917,13 @@ tbody tr:hover {
   .search-input,
   .action-bar .btn {
     width: 100%;
+  }
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .pagination-actions {
+    justify-content: space-between;
   }
 
   table {

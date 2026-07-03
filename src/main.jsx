@@ -1,78 +1,40 @@
 ﻿import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { createClient } from '@supabase/supabase-js';
 import {
   BarChart3,
   Banknote,
   Building2,
   CalendarClock,
   Check,
+  ClipboardList,
   CreditCard,
+  Database,
   DollarSign,
-  Download,
   Eye,
   EyeOff,
+  FileDown,
   LayoutDashboard,
   LogOut,
-  Pencil,
   Plus,
-  Search,
+  ShieldCheck,
   Settings,
   ArrowRightLeft,
-  Trash2,
+  Target,
   TrendingDown,
   TrendingUp,
   UserCircle,
   Users,
   Wallet,
 } from 'lucide-react';
+import { createStoredClient, createSupabaseClient } from './config/supabase';
+import { LOCKED_KEY, REMEMBER_EMAIL_KEY, REMEMBER_KEY } from './constants/authStorage';
+import { clearRememberedAccount, signInWithPassword, signUpUser } from './controllers/auth.controller';
+import { updateMobilePin, updateProfile } from './controllers/profile.controller';
+import { AppDialogs, AuthCard, Field, Modal, RowActions, SelectField, TableSection } from './components/ui';
+import { clearFeedbackHandlers, confirmAction, notify, setFeedbackHandlers } from './services/feedback';
+import { calcEstado, dateFmt, money, month, today } from './utils/format';
+import { hashPin, isMobileViewport } from './utils/security';
 import './styles.css';
-
-const today = () => new Date().toISOString().slice(0, 10);
-const month = () => new Date().toISOString().slice(0, 7);
-const money = (value) =>
-  `S/ ${Number(value || 0).toLocaleString('es-PE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-const dateFmt = (value) => (value ? new Date(`${value}T00:00:00`).toLocaleDateString('es-PE') : '-');
-const REMEMBER_KEY = 'fintrack_remember_account';
-const REMEMBER_EMAIL_KEY = 'fintrack_remember_email';
-const LOCKED_KEY = 'fintrack_locked';
-
-let notifyHandler = null;
-let confirmHandler = null;
-
-function notify(message, type = 'error') {
-  if (notifyHandler) notifyHandler({ message, type });
-}
-
-function confirmAction(message) {
-  if (confirmHandler) return confirmHandler(message);
-  return Promise.resolve(false);
-}
-
-function createStoredClient() {
-  const url = localStorage.getItem('sb_url') || import.meta.env.VITE_SUPABASE_URL || '';
-  const key = localStorage.getItem('sb_key') || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-  return url && key ? createClient(url, key) : null;
-}
-
-function isMobileViewport() {
-  return window.matchMedia?.('(max-width: 760px)').matches;
-}
-
-function randomHex(bytes = 16) {
-  const values = new Uint8Array(bytes);
-  crypto.getRandomValues(values);
-  return Array.from(values, (value) => value.toString(16).padStart(2, '0')).join('');
-}
-
-async function hashPin(pin, salt) {
-  const data = new TextEncoder().encode(`${salt}:${pin}`);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('');
-}
 
 function App() {
   const [supabase, setSupabase] = React.useState(createStoredClient);
@@ -87,16 +49,15 @@ function App() {
   const [locked, setLocked] = React.useState(() => localStorage.getItem(LOCKED_KEY) === '1');
 
   React.useEffect(() => {
-    notifyHandler = ({ message: nextMessage, type }) => {
-      setToast({ message: nextMessage, type });
-      window.clearTimeout(window.__fintrackToastTimer);
-      window.__fintrackToastTimer = window.setTimeout(() => setToast(null), 4500);
-    };
-    confirmHandler = (question) => new Promise((resolve) => setConfirmState({ question, resolve }));
-    return () => {
-      notifyHandler = null;
-      confirmHandler = null;
-    };
+    setFeedbackHandlers({
+      onNotify: ({ message: nextMessage, type }) => {
+        setToast({ message: nextMessage, type });
+        window.clearTimeout(window.__fintrackToastTimer);
+        window.__fintrackToastTimer = window.setTimeout(() => setToast(null), 4500);
+      },
+      onConfirm: (question) => new Promise((resolve) => setConfirmState({ question, resolve })),
+    });
+    return clearFeedbackHandlers;
   }, []);
 
   React.useEffect(() => {
@@ -143,9 +104,7 @@ function App() {
       localStorage.removeItem(LOCKED_KEY);
       setLocked(false);
     }} onFullLogout={async () => {
-      localStorage.removeItem(LOCKED_KEY);
-      localStorage.removeItem(REMEMBER_KEY);
-      localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      clearRememberedAccount();
       await supabase.auth.signOut();
       setSession(null);
       setProfile(null);
@@ -162,10 +121,18 @@ function App() {
     ['finanzas', [
       ['cuentas', 'Cuentas bancarias', Building2, true],
       ['deudas', 'Deudas', CreditCard, true],
+      ['prestamos', 'Préstamos', TrendingDown, true],
+      ['cobros-prestamos', 'Cobros préstamos', TrendingUp, true],
       ['pagos', 'Pagos', Banknote, true],
       ['movimientos', 'Ingresos / Egresos', Wallet, true],
+      ['presupuestos', 'Presupuestos', ClipboardList, true],
+      ['metas', 'Metas', Target, true],
     ]],
-    ['análisis', [['reportes', 'Reportes', BarChart3, true]]],
+    ['análisis', [
+      ['reportes', 'Reportes', BarChart3, true],
+      ['backup', 'Backup', Database, true],
+      ['auditoria', 'Auditoría', ShieldCheck, true],
+    ]],
     ['sistema', [
       ['perfil', 'Mi perfil', UserCircle, true],
       ['config', 'Configuración', Settings, isAdmin],
@@ -242,14 +209,20 @@ function App() {
           </div>
         </div>
         {message && <div className="alert alert-danger">{message}</div>}
-        <div className="page active">
+        <div className={`page active page-${page}`}>
           {page === 'dashboard' && <Dashboard supabase={supabase} user={session.user} isAdmin={isAdmin} />}
           {page === 'clientes' && <Clientes supabase={supabase} user={session.user} />}
           {page === 'cuentas' && <Cuentas supabase={supabase} user={session.user} />}
           {page === 'deudas' && <Deudas supabase={supabase} user={session.user} isAdmin={isAdmin} />}
+          {page === 'prestamos' && <Prestamos supabase={supabase} user={session.user} />}
+          {page === 'cobros-prestamos' && <CobrosPrestamos supabase={supabase} user={session.user} />}
           {page === 'pagos' && <Pagos supabase={supabase} user={session.user} isAdmin={isAdmin} />}
           {page === 'movimientos' && <Movimientos supabase={supabase} user={session.user} isAdmin={isAdmin} />}
+          {page === 'presupuestos' && <Presupuestos supabase={supabase} user={session.user} />}
+          {page === 'metas' && <Metas supabase={supabase} user={session.user} />}
           {page === 'reportes' && <Reportes supabase={supabase} user={session.user} />}
+          {page === 'backup' && <Backup supabase={supabase} user={session.user} />}
+          {page === 'auditoria' && <Auditoria supabase={supabase} user={session.user} />}
           {page === 'perfil' && <Perfil supabase={supabase} user={session.user} profile={profile} onSaved={() => setRefreshKey((x) => x + 1)} />}
           {page === 'config' && isAdmin && <Config onReady={setSupabase} />}
         </div>
@@ -265,28 +238,43 @@ function initials(profile, email) {
 function fullName(profile) {
   return [profile?.nombre, profile?.apellido].filter(Boolean).join(' ');
 }
+function downloadText(filename, content, type = 'application/json') {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+function toCsv(rows) {
+  if (!rows.length) return '';
+  const columns = Object.keys(rows[0]);
+  const escape = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+  return [columns.join(','), ...rows.map((row) => columns.map((column) => escape(row[column])).join(','))].join('\n');
+}
+async function logAudit(supabase, userId, tabla, accion, descripcion, registro_id = null, datos = null) {
+  await supabase.from('auditoria').insert({ admin_id: userId, tabla, accion, descripcion, registro_id, datos });
+}
 function pageTitle(page, isAdmin) {
   const labels = {
     dashboard: ['Dashboard', 'Resumen general de finanzas'],
     clientes: ['Clientes', 'Gestión de clientes y deudores'],
     cuentas: ['Cuentas bancarias', 'Administra tus cuentas y billeteras'],
-    deudas: ['Deudas', 'Registro y seguimiento de deudas'],
+    deudas: ['Deudas', 'Ventas, servicios y pendientes por cobrar'],
+    prestamos: ['Préstamos', 'Dinero desembolsado a clientes'],
+    'cobros-prestamos': ['Cobros de préstamos', 'Pagos recibidos por préstamos'],
     pagos: ['Pagos', 'Historial de pagos recibidos'],
     movimientos: ['Ingresos y egresos', 'Movimientos generales de caja'],
+    presupuestos: ['Presupuestos', 'Control mensual por categoría'],
+    metas: ['Metas financieras', 'Objetivos de ahorro y crecimiento'],
     reportes: ['Reportes', 'Análisis financiero'],
+    backup: ['Backup', 'Exportación de datos'],
+    auditoria: ['Auditoría', 'Historial de acciones importantes'],
     perfil: ['Mi perfil', 'Información personal y seguridad'],
     config: ['Configuración', 'Conexión a base de datos'],
   };
   return labels[page] || ['FinTrack', ''];
-}
-function calcEstado(deuda) {
-  const pendiente = Number(deuda.monto_total || 0) - Number(deuda.monto_pagado || 0);
-  if (pendiente <= 0) return 'pagado';
-  if (!deuda.fecha_vencimiento) return 'al_dia';
-  const diff = (new Date(`${deuda.fecha_vencimiento}T00:00:00`) - new Date(new Date().toDateString())) / 86400000;
-  if (diff < 0) return 'vencido';
-  if (diff <= 7) return 'por_vencer';
-  return 'al_dia';
 }
 function badge(estado) {
   const map = {
@@ -296,6 +284,9 @@ function badge(estado) {
     pagado: ['badge-blue', 'Pagado'],
     ingreso: ['badge-green', 'Ingreso'],
     egreso: ['badge-red', 'Egreso'],
+    activa: ['badge-green', 'Activa'],
+    completada: ['badge-blue', 'Completada'],
+    pausada: ['badge-yellow', 'Pausada'],
   };
   const [className, text] = map[estado] || ['badge-gray', estado];
   return <span className={`badge ${className}`}>{text}</span>;
@@ -316,24 +307,21 @@ function Auth({ supabase, message, setMessage }) {
     event.preventDefault();
     setMessage('');
     if (mode === 'login') {
-      const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
+      const { error } = await signInWithPassword({
+        supabase,
+        email: form.email,
+        password: form.password,
+        remember,
+      });
       if (error) setMessage(error.message);
-      if (!error) {
-        if (remember) {
-          localStorage.setItem(REMEMBER_KEY, '1');
-          localStorage.setItem(REMEMBER_EMAIL_KEY, form.email.trim());
-        } else {
-          localStorage.removeItem(REMEMBER_KEY);
-          localStorage.removeItem(REMEMBER_EMAIL_KEY);
-          localStorage.removeItem(LOCKED_KEY);
-        }
-      }
       return;
     }
-    const { error } = await supabase.auth.signUp({
+    const { error } = await signUpUser({
+      supabase,
       email: form.email,
       password: form.password,
-      options: { data: { nombre: form.nombre, apellido: form.apellido }, emailRedirectTo: window.location.origin },
+      nombre: form.nombre,
+      apellido: form.apellido,
     });
     if (error) {
       const rateLimited = error.status === 429 || /rate limit|email rate/i.test(error.message);
@@ -428,70 +416,6 @@ function PinUnlock({ profile, onUnlock, onFullLogout }) {
   );
 }
 
-function AuthCard({ title, children }) {
-  return (
-    <div id="auth-screen">
-      <div className="auth-card">
-        <div className="auth-logo">
-          <div className="logo-icon"><TrendingUp /></div>
-          <h1>{title}</h1>
-          <p>Sistema de gestión financiera</p>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function AppDialogs({ toast, onCloseToast, confirmState, setConfirmState }) {
-  function answer(value) {
-    confirmState?.resolve(value);
-    setConfirmState(null);
-  }
-  return (
-    <>
-      {toast && (
-        <div className={`toast toast-${toast.type || 'error'}`}>
-          <span>{toast.message}</span>
-          <button type="button" onClick={onCloseToast}>X</button>
-        </div>
-      )}
-      {confirmState && (
-        <div className="dialog-overlay">
-          <div className="dialog-card">
-            <h3>Confirmar acción</h3>
-            <p>{confirmState.question}</p>
-            <div className="dialog-actions">
-              <button className="btn" type="button" onClick={() => answer(false)}>Cancelar</button>
-              <button className="btn btn-danger" type="button" onClick={() => answer(true)}>Confirmar</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-function Field({ label, type = 'text', value, onChange, required = false, minLength, placeholder, rightElement, ...inputProps }) {
-  return (
-    <div className="form-group">
-      <label>{label}</label>
-      <div className={rightElement ? 'input-wrap' : ''}>
-        <input type={type} value={value} required={required} minLength={minLength} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} {...inputProps} />
-        {rightElement}
-      </div>
-    </div>
-  );
-}
-function SelectField({ label, value, onChange, children }) {
-  return (
-    <div className="form-group">
-      <label>{label}</label>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>{children}</select>
-    </div>
-  );
-}
-
 function Config({ onReady, compact = false }) {
   const [url, setUrl] = React.useState(localStorage.getItem('sb_url') || import.meta.env.VITE_SUPABASE_URL || '');
   const [key, setKey] = React.useState(localStorage.getItem('sb_key') || import.meta.env.VITE_SUPABASE_ANON_KEY || '');
@@ -504,7 +428,7 @@ function Config({ onReady, compact = false }) {
       setStatus('La URL debe tener formato https://proyecto.supabase.co');
       return;
     }
-    const client = createClient(cleanUrl, key.trim());
+    const client = createSupabaseClient(cleanUrl, key.trim());
     const { error } = await client.from('profiles').select('id').limit(1);
     if (error && !/profiles|schema cache|relation/i.test(error.message) && error.code !== '42501') {
       setStatus(error.message);
@@ -535,20 +459,24 @@ function Config({ onReady, compact = false }) {
 }
 
 function Dashboard({ supabase, user, isAdmin }) {
-  const [data, setData] = React.useState({ deudas: [], pagos: [], cuentas: [], movimientos: [] });
+  const [data, setData] = React.useState({ deudas: [], pagos: [], cuentas: [], movimientos: [], presupuestos: [], metas: [] });
   React.useEffect(() => {
     async function load() {
       const deudasQ = supabase.from('deudas').select('*,clientes(nombre,apellido)');
       const pagosQ = supabase.from('pagos').select('*,clientes(nombre,apellido),deudas(descripcion)').order('fecha', { ascending: false }).limit(30);
       const movQ = supabase.from('movimientos').select('*');
       const cuentasQ = supabase.from('cuentas').select('*').eq('admin_id', user.id);
-      const [deudas, pagos, cuentas, movimientos] = await Promise.all([
+      const presupuestosQ = supabase.from('presupuestos').select('*,tipos_movimiento(nombre)').eq('admin_id', user.id).eq('mes', month());
+      const metasQ = supabase.from('metas').select('*').eq('admin_id', user.id).order('fecha_objetivo', { ascending: true });
+      const [deudas, pagos, cuentas, movimientos, presupuestos, metas] = await Promise.all([
         deudasQ.eq('admin_id', user.id),
         pagosQ.eq('admin_id', user.id),
         cuentasQ,
-        movQ,
+        movQ.eq('admin_id', user.id),
+        presupuestosQ,
+        metasQ,
       ]);
-      setData({ deudas: deudas.data || [], pagos: pagos.data || [], cuentas: cuentas.data || [], movimientos: movimientos.data || [] });
+      setData({ deudas: deudas.data || [], pagos: pagos.data || [], cuentas: cuentas.data || [], movimientos: movimientos.data || [], presupuestos: presupuestos.data || [], metas: metas.data || [] });
     }
     load();
   }, [supabase, user.id, isAdmin]);
@@ -557,25 +485,80 @@ function Dashboard({ supabase, user, isAdmin }) {
   const egresos = data.movimientos.filter((m) => m.tipo === 'egreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
   const pagosMes = data.pagos.filter((p) => p.fecha?.startsWith(month())).reduce((sum, p) => sum + Number(p.monto || 0), 0);
   const porVencer = data.deudas.filter((d) => ['por_vencer', 'vencido'].includes(calcEstado(d))).slice(0, 5);
+  const movimientosMes = data.movimientos.filter((m) => m.fecha?.startsWith(month()));
+  const balanceTotal = data.cuentas.reduce((s, c) => s + Number(c.saldo || 0), 0);
+  const cobradoDeudas = data.deudas.reduce((sum, d) => sum + Number(d.monto_pagado || 0), 0);
+  const pagosPorDia = data.pagos
+    .filter((p) => p.fecha?.startsWith(month()))
+    .reduce((map, p) => {
+      const day = p.fecha.slice(-2);
+      map[day] = (map[day] || 0) + Number(p.monto || 0);
+      return map;
+    }, {});
+  const accountChart = data.cuentas.map((c) => ({ label: c.banco, value: Number(c.saldo || 0) }));
+  const debtChart = [
+    { label: 'Cobrado', value: cobradoDeudas },
+    { label: 'Pendiente', value: pendiente },
+  ];
+  const paymentsChart = Object.entries(pagosPorDia).slice(-8).map(([label, value]) => ({ label, value }));
+  const movementChart = [
+    { label: 'Ingresos', value: ingresos },
+    { label: 'Egresos', value: egresos },
+  ];
+  const presupuestoAlerts = data.presupuestos
+    .map((p) => {
+      const usado = movimientosMes
+        .filter((m) => m.tipo === p.tipo && ((p.tipo_movimiento_id && m.tipo_movimiento_id === p.tipo_movimiento_id) || (!p.tipo_movimiento_id && (m.categoria || '') === (p.categoria || ''))))
+        .reduce((sum, m) => sum + Number(m.monto || 0), 0);
+      const limite = Number(p.monto_limite || 0);
+      return { label: p.tipos_movimiento?.nombre || p.categoria || p.tipo, usado, limite, pct: limite ? Math.round((usado / limite) * 100) : 0 };
+    })
+    .filter((p) => p.limite && p.pct >= 80);
+  const metasAlerts = data.metas
+    .filter((m) => m.estado === 'activa')
+    .filter((m) => Number(m.monto_objetivo || 0) > 0)
+    .map((m) => ({ ...m, pct: Math.round((Number(m.monto_actual || 0) / Number(m.monto_objetivo || 0)) * 100) }))
+    .filter((m) => m.pct >= 80)
+    .slice(0, 3);
 
   return (
     <>
       <div className="metrics-grid">
-        <MetricCard icon={<Wallet />} label="Balance cuentas" value={money(data.cuentas.reduce((s, c) => s + Number(c.saldo || 0), 0))} helper={`${data.cuentas.length} cuentas activas`} />
-        <MetricCard icon={<CreditCard />} label="Pendiente por cobrar" value={money(pendiente)} helper={`${data.deudas.filter((d) => calcEstado(d) !== 'pagado').length} deudas activas`} danger />
-        <MetricCard icon={<Banknote />} label="Pagos del mes" value={money(pagosMes)} helper={`${data.pagos.filter((p) => p.fecha?.startsWith(month())).length} pagos`} />
-        <MetricCard icon={<TrendingUp />} label="Ingresos / Egresos" value={`${money(ingresos)} / ${money(egresos)}`} helper="Movimientos generales" />
+        <MetricCard icon={<Wallet />} label="Balance cuentas" value={money(balanceTotal)} helper={`${data.cuentas.length} cuentas activas`} chart={<MiniBarChart items={accountChart} />} />
+        <MetricCard icon={<CreditCard />} label="Pendiente por cobrar" value={money(pendiente)} helper={`${data.deudas.filter((d) => calcEstado(d) !== 'pagado').length} deudas activas`} danger chart={<MiniBarChart items={debtChart} danger />} />
+        <MetricCard icon={<Banknote />} label="Pagos del mes" value={money(pagosMes)} helper={`${data.pagos.filter((p) => p.fecha?.startsWith(month())).length} pagos`} chart={<MiniBarChart items={paymentsChart} />} />
+        <MetricCard icon={<TrendingUp />} label="Ingresos / Egresos" value={`${money(ingresos)} / ${money(egresos)}`} helper="Movimientos generales" chart={<MiniBarChart items={movementChart} split />} />
       </div>
       <div className="grid-2">
         <ListCard title="Deudas por vencer" empty="Sin deudas por vencer" items={porVencer.map((d) => `${d.clientes?.nombre || ''} - ${d.descripcion}: ${money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}`)} />
         <ListCard title="Últimos pagos registrados" empty="Sin pagos registrados" items={data.pagos.slice(0, 5).map((p) => `${dateFmt(p.fecha)} - ${p.clientes?.nombre || ''}: ${money(p.monto)}`)} />
       </div>
+      <div className="grid-2 dashboard-extra">
+        <ListCard title="Alertas de presupuesto" empty="Sin presupuestos en alerta" items={presupuestoAlerts.map((p) => `${p.label}: ${money(p.usado)} de ${money(p.limite)} (${p.pct}%)`)} />
+        <ListCard title="Metas próximas" empty="Sin metas próximas" items={metasAlerts.map((m) => `${m.nombre}: ${m.pct}% completado (${money(m.monto_actual)} / ${money(m.monto_objetivo)})`)} />
+      </div>
     </>
   );
 }
 
-function MetricCard({ icon, label, value, helper, danger = false }) {
-  return <div className="metric-card"><div className="metric-label">{icon}{label}</div><div className={`metric-value ${danger ? 'danger-text' : ''}`}>{value}</div><div className="metric-change neutral">{helper}</div></div>;
+function MetricCard({ icon, label, value, helper, danger = false, chart }) {
+  return <div className="metric-card"><div className="metric-label">{icon}{label}</div><div className={`metric-value ${danger ? 'danger-text' : ''}`}>{value}</div>{chart}<div className="metric-change neutral">{helper}</div></div>;
+}
+function MiniBarChart({ items, danger = false, split = false }) {
+  const cleanItems = items.filter((item) => Number(item.value || 0) > 0).slice(0, 8);
+  const max = Math.max(...cleanItems.map((item) => Number(item.value || 0)), 1);
+  if (!cleanItems.length) return <div className="mini-chart-empty">Sin datos para gráfico</div>;
+  return (
+    <div className="mini-chart">
+      {cleanItems.map((item, index) => (
+        <div className="mini-chart-row" key={`${item.label}-${index}`}>
+          <span>{item.label}</span>
+          <div className="mini-chart-track"><i className={`${danger ? 'danger' : ''} ${split && index === 1 ? 'danger' : ''}`} style={{ width: `${Math.max(8, (Number(item.value || 0) / max) * 100)}%` }} /></div>
+          <b>{money(item.value)}</b>
+        </div>
+      ))}
+    </div>
+  );
 }
 function ListCard({ title, items, empty }) {
   return <div className="card"><div className="card-header"><h3>{title}</h3></div><div className="card-body">{items.length ? items.map((x) => <div className="list-row" key={x}>{x}</div>) : <div className="empty-state"><p>{empty}</p></div>}</div></div>;
@@ -672,18 +655,29 @@ function Cuentas({ supabase, user }) {
   const [open, setOpen] = React.useState(false);
   const [transferOpen, setTransferOpen] = React.useState(false);
   const [transferencias, setTransferencias] = React.useState([]);
+  const [historial, setHistorial] = React.useState([]);
   const emptyForm = { banco: '', tipo: 'Ahorros', numero: '', cci: '', moneda: 'PEN', saldo: '' };
   const emptyTransfer = { tipo_destino: 'propia', cuenta_origen_id: '', cuenta_destino_id: '', banco_destino: '', numero_destino: '', titular_destino: '', monto: '', fecha: today(), notas: '' };
   const [editingId, setEditingId] = React.useState(null);
   const [form, setForm] = React.useState(emptyForm);
   const [transferForm, setTransferForm] = React.useState(emptyTransfer);
   const load = React.useCallback(async () => {
-    const [{ data: cuentasData }, { data: transferenciasData }] = await Promise.all([
+    const [{ data: cuentasData }, { data: transferenciasData }, { data: movimientosData }, { data: pagosData }] = await Promise.all([
       supabase.from('cuentas').select('*').eq('admin_id', user.id).order('created_at', { ascending: false }),
       supabase.from('transferencias').select('*').eq('admin_id', user.id).order('fecha', { ascending: false }).limit(10),
+      supabase.from('movimientos').select('id,fecha,tipo,concepto,monto,cuenta_id').eq('admin_id', user.id).order('fecha', { ascending: false }).limit(80),
+      supabase.from('pagos').select('id,fecha,monto,metodo,cuenta_id,clientes(nombre,apellido)').eq('admin_id', user.id).order('fecha', { ascending: false }).limit(80),
     ]);
     setCuentas(cuentasData || []);
     setTransferencias(transferenciasData || []);
+    setHistorial([
+      ...(movimientosData || []).filter((m) => m.cuenta_id).map((m) => ({ fecha: m.fecha, cuenta_id: m.cuenta_id, tipo: m.tipo, detalle: m.concepto, monto: Number(m.monto || 0) })),
+      ...(pagosData || []).filter((p) => p.cuenta_id).map((p) => ({ fecha: p.fecha, cuenta_id: p.cuenta_id, tipo: 'ingreso', detalle: `Pago ${p.metodo || ''} - ${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, monto: Number(p.monto || 0) })),
+      ...(transferenciasData || []).flatMap((t) => [
+        { fecha: t.fecha, cuenta_id: t.cuenta_origen_id, tipo: 'egreso', detalle: 'Transferencia enviada', monto: Number(t.monto || 0) },
+        t.cuenta_destino_id ? { fecha: t.fecha, cuenta_id: t.cuenta_destino_id, tipo: 'ingreso', detalle: 'Transferencia recibida', monto: Number(t.monto || 0) } : null,
+      ].filter(Boolean)),
+    ].sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || ''))).slice(0, 80));
   }, [supabase, user.id]);
   React.useEffect(() => { load(); }, [load]);
   function openCreate() {
@@ -760,6 +754,8 @@ function Cuentas({ supabase, user }) {
       <div className="action-bar"><div></div><div className="table-actions"><button className="btn" onClick={() => setTransferOpen(true)}><ArrowRightLeft size={16} />Nueva transferencia</button><button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva cuenta</button></div></div>
       <div className="grid-3">{cuentas.map((c) => <div className="account-card account-card-hover" key={c.id}><div className="account-card-actions"><RowActions onEdit={() => openEdit(c)} onDelete={() => remove(c)} /></div><Building2 /><strong>{c.banco}</strong><span>{c.tipo} - {c.moneda}</span><b>{money(c.saldo)}</b></div>)}</div>
       <div className="card transfer-card"><div className="card-header"><h3>Ultimas transferencias</h3></div><div className="card-body">{transferencias.length ? transferencias.map((t) => <div className="list-row transfer-row" key={t.id}><span>{dateFmt(t.fecha)} - {cuentaNombre(t.cuenta_origen_id)} a {t.tipo_destino === 'propia' ? cuentaNombre(t.cuenta_destino_id) : `${t.banco_destino || 'Cuenta externa'} ${t.numero_destino || ''}`}</span><strong>{money(t.monto)}</strong></div>) : <div className="empty-state"><p>Sin transferencias registradas</p></div>}</div></div>
+      <div className="report-spacer" />
+      <TableSection title="Historial por cuenta" columns={['Fecha', 'Cuenta', 'Tipo', 'Detalle', 'Monto']} rows={historial.map((h) => [dateFmt(h.fecha), cuentaNombre(h.cuenta_id), badge(h.tipo), h.detalle || '-', money(h.monto)])} />
       <Modal open={open} title={editingId ? 'Editar cuenta bancaria' : 'Nueva cuenta bancaria'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
           <div className="modal-body">
@@ -822,10 +818,11 @@ function Deudas({ supabase, user, isAdmin }) {
   const [clientes, setClientes] = React.useState([]);
   const [open, setOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState(null);
-  const [form, setForm] = React.useState({ cliente_id: '', descripcion: '', monto_total: '', interes: '0', tipo: 'Préstamo', fecha_inicio: today(), fecha_vencimiento: '', notas: '' });
+  const emptyDebtForm = { cliente_id: '', descripcion: '', monto_total: '', interes: '0', tipo: 'Venta', fecha_inicio: today(), fecha_vencimiento: '', notas: '' };
+  const [form, setForm] = React.useState(emptyDebtForm);
   const load = React.useCallback(() => {
     const q = supabase.from('deudas').select('*,clientes(nombre,apellido,user_id)').order('fecha_vencimiento');
-    q.eq('admin_id', user.id).then(({ data }) => setDeudas((data || []).map((d) => ({ ...d, estado: calcEstado(d) }))));
+    q.eq('admin_id', user.id).neq('tipo', 'Préstamo').then(({ data }) => setDeudas((data || []).map((d) => ({ ...d, estado: calcEstado(d) }))));
   }, [supabase, user.id]);
   React.useEffect(() => {
     load();
@@ -833,7 +830,7 @@ function Deudas({ supabase, user, isAdmin }) {
   }, [load, supabase, user.id]);
   function openCreate() {
     setEditingId(null);
-    setForm({ cliente_id: '', descripcion: '', monto_total: '', interes: '0', tipo: 'Préstamo', fecha_inicio: today(), fecha_vencimiento: '', notas: '' });
+    setForm(emptyDebtForm);
     setOpen(true);
   }
   function openEdit(deuda) {
@@ -880,7 +877,7 @@ function Deudas({ supabase, user, isAdmin }) {
       notify(error.message);
       return;
     }
-    setForm({ cliente_id: '', descripcion: '', monto_total: '', interes: '0', tipo: 'Préstamo', fecha_inicio: today(), fecha_vencimiento: '', notas: '' });
+    setForm(emptyDebtForm);
     setEditingId(null);
     setOpen(false);
     load();
@@ -890,8 +887,8 @@ function Deudas({ supabase, user, isAdmin }) {
       <TableSection
         title="Deudas"
         action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva deuda</button>}
-        columns={['Cliente', 'Descripción', 'Total', 'Pendiente', 'Vencimiento', 'Estado']}
-        rows={deudas.map((d) => [`${d.clientes?.nombre || ''} ${d.clientes?.apellido || ''}`, d.descripcion, money(d.monto_total), money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0)), dateFmt(d.fecha_vencimiento), badge(d.estado), <RowActions onEdit={() => openEdit(d)} onDelete={() => remove(d)} />])}
+        columns={['Cliente', 'Descripción', 'Tipo', 'Total', 'Pendiente', 'Vencimiento', 'Estado']}
+        rows={deudas.map((d) => [`${d.clientes?.nombre || ''} ${d.clientes?.apellido || ''}`, d.descripcion, d.tipo, money(d.monto_total), money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0)), dateFmt(d.fecha_vencimiento), badge(d.estado), <RowActions onEdit={() => openEdit(d)} onDelete={() => remove(d)} />])}
       />
       <Modal open={open} title={editingId ? 'Editar deuda' : 'Nueva deuda'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
@@ -906,13 +903,239 @@ function Deudas({ supabase, user, isAdmin }) {
               <Field label="Interés (%)" type="number" value={form.interes} onChange={(v) => setForm({ ...form, interes: v })} />
             </div>
             <div className="form-row">
-              <SelectField label="Tipo" value={form.tipo} onChange={(v) => setForm({ ...form, tipo: v })}><option>Préstamo</option><option>Venta</option><option>Servicio</option><option>Otro</option></SelectField>
+              <SelectField label="Tipo" value={form.tipo} onChange={(v) => setForm({ ...form, tipo: v })}><option>Venta</option><option>Servicio</option><option>Otro</option></SelectField>
               <Field label="Vencimiento" type="date" value={form.fecha_vencimiento} onChange={(v) => setForm({ ...form, fecha_vencimiento: v })} />
             </div>
             <Field label="Fecha inicio" type="date" value={form.fecha_inicio} onChange={(v) => setForm({ ...form, fecha_inicio: v })} />
             <div className="form-group"><label>Notas</label><textarea value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>
           </div>
           <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />Guardar</button></div>
+        </form>
+      </Modal>
+    </>
+  );
+}
+
+function Prestamos({ supabase, user }) {
+  const emptyForm = { cliente_id: '', descripcion: '', monto_total: '', interes: '0', cuenta_desembolso_id: '', fecha_inicio: today(), fecha_vencimiento: '', notas: '' };
+  const [prestamos, setPrestamos] = React.useState([]);
+  const [clientes, setClientes] = React.useState([]);
+  const [cuentas, setCuentas] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [form, setForm] = React.useState(emptyForm);
+  const load = React.useCallback(async () => {
+    const [prestamosQ, clientesQ, cuentasQ] = await Promise.all([
+      supabase.from('deudas').select('*,clientes(nombre,apellido),cuentas(banco,tipo)').eq('admin_id', user.id).eq('tipo', 'Préstamo').order('fecha_inicio', { ascending: false }),
+      supabase.from('clientes').select('*').eq('admin_id', user.id).order('nombre'),
+      supabase.from('cuentas').select('*').eq('admin_id', user.id).order('banco'),
+    ]);
+    setPrestamos((prestamosQ.data || []).map((p) => ({ ...p, estado: calcEstado(p) })));
+    setClientes(clientesQ.data || []);
+    setCuentas(cuentasQ.data || []);
+  }, [supabase, user.id]);
+  React.useEffect(() => { load(); }, [load]);
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setOpen(true);
+  }
+  function openEdit(prestamo) {
+    setEditingId(prestamo.id);
+    setForm({
+      cliente_id: prestamo.cliente_id || '',
+      descripcion: prestamo.descripcion || '',
+      monto_total: prestamo.monto_total ?? '',
+      interes: prestamo.interes ?? '0',
+      cuenta_desembolso_id: prestamo.cuenta_desembolso_id || '',
+      fecha_inicio: prestamo.fecha_inicio || today(),
+      fecha_vencimiento: prestamo.fecha_vencimiento || '',
+      notas: prestamo.notas || '',
+    });
+    setOpen(true);
+  }
+  async function remove(prestamo) {
+    if (!(await confirmAction(`Eliminar préstamo ${prestamo.descripcion || ''}? Se revertirá el desembolso.`))) return;
+    const { error } = await supabase.rpc('eliminar_prestamo', { p_deuda_id: prestamo.id });
+    if (error) {
+      notify(error.message);
+      return;
+    }
+    load();
+  }
+  async function save(event) {
+    event.preventDefault();
+    if (!form.cliente_id || !form.descripcion || !form.monto_total || !form.cuenta_desembolso_id) {
+      notify('Cliente, descripción, monto y cuenta origen son obligatorios.');
+      return;
+    }
+    const basePayload = {
+      p_cliente_id: form.cliente_id,
+      p_descripcion: form.descripcion,
+      p_monto_total: Number(form.monto_total || 0),
+      p_interes: Number(form.interes || 0),
+      p_fecha_inicio: form.fecha_inicio || today(),
+      p_fecha_vencimiento: form.fecha_vencimiento || null,
+      p_notas: form.notas || null,
+      p_cuenta_desembolso_id: form.cuenta_desembolso_id,
+    };
+    const { error } = editingId
+      ? await supabase.rpc('actualizar_prestamo', { p_deuda_id: editingId, ...basePayload })
+      : await supabase.rpc('registrar_deuda_con_desembolso', { ...basePayload, p_tipo: 'Préstamo', p_desembolsar: true });
+    if (error) {
+      notify(error.message);
+      return;
+    }
+    setForm(emptyForm);
+    setEditingId(null);
+    setOpen(false);
+    load();
+  }
+  return (
+    <>
+      <TableSection
+        title="Préstamos desembolsados"
+        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo préstamo</button>}
+        columns={['Cliente', 'Descripción', 'Cuenta origen', 'Desembolsado', 'Cobrado', 'Pendiente', 'Estado']}
+        rows={prestamos.map((p) => [`${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.descripcion, p.cuentas ? `${p.cuentas.banco} - ${p.cuentas.tipo || ''}` : '-', money(p.monto_total), money(p.monto_pagado), money(Number(p.monto_total || 0) - Number(p.monto_pagado || 0)), badge(p.estado), <RowActions onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
+      />
+      <Modal open={open} title={editingId ? 'Editar préstamo' : 'Nuevo préstamo'} onClose={() => setOpen(false)}>
+        <form onSubmit={save}>
+          <div className="modal-body">
+            <div className="alert alert-warning">Esta operación descuenta dinero de la cuenta origen y crea una deuda por cobrar al cliente.</div>
+            <SelectField label="Cliente" value={form.cliente_id} onChange={(v) => setForm({ ...form, cliente_id: v })}>
+              <option value="">Seleccionar cliente...</option>
+              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre} {c.apellido || ''}</option>)}
+            </SelectField>
+            <SelectField label="Cuenta origen" value={form.cuenta_desembolso_id} onChange={(v) => setForm({ ...form, cuenta_desembolso_id: v })}>
+              <option value="">Seleccionar cuenta...</option>
+              {cuentas.map((c) => <option key={c.id} value={c.id}>{c.banco} - {c.tipo} - {money(c.saldo)}</option>)}
+            </SelectField>
+            <Field label="Descripción" value={form.descripcion} onChange={(v) => setForm({ ...form, descripcion: v })} placeholder="Préstamo personal, adelanto..." required />
+            <div className="form-row">
+              <Field label="Monto desembolsado" type="number" value={form.monto_total} onChange={(v) => setForm({ ...form, monto_total: v })} required />
+              <Field label="Interés (%)" type="number" value={form.interes} onChange={(v) => setForm({ ...form, interes: v })} />
+            </div>
+            <div className="form-row">
+              <Field label="Fecha desembolso" type="date" value={form.fecha_inicio} onChange={(v) => setForm({ ...form, fecha_inicio: v })} />
+              <Field label="Vencimiento" type="date" value={form.fecha_vencimiento} onChange={(v) => setForm({ ...form, fecha_vencimiento: v })} />
+            </div>
+            <div className="form-group"><label>Notas</label><textarea value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>
+          </div>
+          <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><TrendingDown size={16} />{editingId ? 'Actualizar' : 'Desembolsar'}</button></div>
+        </form>
+      </Modal>
+    </>
+  );
+}
+
+function CobrosPrestamos({ supabase, user }) {
+  const [pagos, setPagos] = React.useState([]);
+  const [clientes, setClientes] = React.useState([]);
+  const [prestamos, setPrestamos] = React.useState([]);
+  const [cuentas, setCuentas] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [form, setForm] = React.useState({ cliente_id: '', deuda_id: '', cuenta_id: '', monto: '', metodo: 'Transferencia', referencia: '', fecha: today(), notas: '' });
+  const load = React.useCallback(async () => {
+    const [pagosQ, clientesQ, prestamosQ, cuentasQ] = await Promise.all([
+      supabase.from('pagos').select('*,clientes(nombre,apellido),deudas(descripcion,tipo),cuentas(banco)').eq('admin_id', user.id).order('fecha', { ascending: false }),
+      supabase.from('clientes').select('*').eq('admin_id', user.id).order('nombre'),
+      supabase.from('deudas').select('*,clientes(nombre,apellido)').eq('admin_id', user.id).eq('tipo', 'Préstamo'),
+      supabase.from('cuentas').select('*').eq('admin_id', user.id).order('banco'),
+    ]);
+    setPagos((pagosQ.data || []).filter((p) => p.deudas?.tipo === 'Préstamo'));
+    setClientes(clientesQ.data || []);
+    setPrestamos((prestamosQ.data || []).map((p) => ({ ...p, estado: calcEstado(p) })));
+    setCuentas(cuentasQ.data || []);
+  }, [supabase, user.id]);
+  React.useEffect(() => { load(); }, [load]);
+  const prestamosCliente = prestamos.filter((p) => p.cliente_id === form.cliente_id && (editingId || calcEstado(p) !== 'pagado'));
+  function openCreate() {
+    setEditingId(null);
+    setForm({ cliente_id: '', deuda_id: '', cuenta_id: '', monto: '', metodo: 'Transferencia', referencia: '', fecha: today(), notas: '' });
+    setOpen(true);
+  }
+  function openEdit(pago) {
+    setEditingId(pago.id);
+    setForm({
+      cliente_id: pago.cliente_id || '',
+      deuda_id: pago.deuda_id || '',
+      cuenta_id: pago.cuenta_id || '',
+      monto: pago.monto ?? '',
+      metodo: pago.metodo || 'Transferencia',
+      referencia: pago.referencia || '',
+      fecha: pago.fecha || today(),
+      notas: pago.notas || '',
+    });
+    setOpen(true);
+  }
+  async function remove(pago) {
+    if (!(await confirmAction('Eliminar este cobro? Se revertirá el saldo de la cuenta y el pendiente del préstamo.'))) return;
+    const { error } = await supabase.rpc('eliminar_pago', { p_pago_id: pago.id });
+    if (error) {
+      notify(error.message);
+      return;
+    }
+    load();
+  }
+  async function save(event) {
+    event.preventDefault();
+    const payload = {
+      p_deuda_id: form.deuda_id,
+      p_cliente_id: form.cliente_id,
+      p_cuenta_id: form.cuenta_id || null,
+      p_monto: Number(form.monto || 0),
+      p_metodo: form.metodo,
+      p_referencia: form.referencia || null,
+      p_fecha: form.fecha,
+      p_notas: form.notas || null,
+    };
+    if (!payload.p_cliente_id || !payload.p_deuda_id || !payload.p_monto || !payload.p_fecha) return;
+    const { error } = editingId
+      ? await supabase.rpc('actualizar_pago', { p_pago_id: editingId, ...payload })
+      : await supabase.rpc('registrar_pago', payload);
+    if (error) {
+      notify(error.message);
+      return;
+    }
+    setForm({ cliente_id: '', deuda_id: '', cuenta_id: '', monto: '', metodo: 'Transferencia', referencia: '', fecha: today(), notas: '' });
+    setEditingId(null);
+    setOpen(false);
+    load();
+  }
+  return (
+    <>
+      <TableSection
+        title="Cobros de préstamos"
+        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Registrar cobro</button>}
+        columns={['Fecha', 'Cliente', 'Préstamo', 'Monto', 'Método', 'Cuenta destino']}
+        rows={pagos.map((p) => [dateFmt(p.fecha), `${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.deudas?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
+      />
+      <Modal open={open} title={editingId ? 'Editar cobro de préstamo' : 'Registrar cobro de préstamo'} onClose={() => setOpen(false)}>
+        <form onSubmit={save}>
+          <div className="modal-body">
+            <div className="alert alert-warning">Esta operación aumenta el saldo de la cuenta destino y reduce el pendiente del préstamo.</div>
+            <SelectField label="Cliente" value={form.cliente_id} onChange={(v) => setForm({ ...form, cliente_id: v, deuda_id: '' })}>
+              <option value="">Seleccionar cliente...</option>
+              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre} {c.apellido || ''}</option>)}
+            </SelectField>
+            <SelectField label="Préstamo" value={form.deuda_id} onChange={(v) => setForm({ ...form, deuda_id: v })}>
+              <option value="">Seleccionar préstamo...</option>
+              {prestamosCliente.map((p) => <option key={p.id} value={p.id}>{p.descripcion} - pendiente {money(Number(p.monto_total || 0) - Number(p.monto_pagado || 0))}</option>)}
+            </SelectField>
+            <div className="form-row">
+              <Field label="Monto cobrado" type="number" value={form.monto} onChange={(v) => setForm({ ...form, monto: v })} required />
+              <Field label="Fecha de cobro" type="date" value={form.fecha} onChange={(v) => setForm({ ...form, fecha: v })} required />
+            </div>
+            <div className="form-row">
+              <SelectField label="Método" value={form.metodo} onChange={(v) => setForm({ ...form, metodo: v })}><option>Efectivo</option><option>Transferencia</option><option>Yape</option><option>Plin</option><option>Depósito</option></SelectField>
+              <SelectField label="Cuenta destino" value={form.cuenta_id} onChange={(v) => setForm({ ...form, cuenta_id: v })}><option value="">Sin cuenta</option>{cuentas.map((c) => <option key={c.id} value={c.id}>{c.banco} - {c.tipo}</option>)}</SelectField>
+            </div>
+            <Field label="Referencia" value={form.referencia} onChange={(v) => setForm({ ...form, referencia: v })} />
+            <div className="form-group"><label>Notas</label><textarea value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>
+          </div>
+          <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><TrendingUp size={16} />{editingId ? 'Actualizar cobro' : 'Registrar cobro'}</button></div>
         </form>
       </Modal>
     </>
@@ -1182,10 +1405,238 @@ function Movimientos({ supabase, user, isAdmin }) {
   );
 }
 
-function Reportes({ supabase, user }) {
+function Presupuestos({ supabase, user }) {
+  const emptyForm = { mes: month(), tipo: 'egreso', tipo_movimiento_id: '', categoria: '', monto_limite: '', notas: '' };
+  const [rows, setRows] = React.useState([]);
+  const [tipos, setTipos] = React.useState([]);
+  const [movimientos, setMovimientos] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [form, setForm] = React.useState(emptyForm);
+  const load = React.useCallback(async () => {
+    const [presupuestos, tiposData, movimientosData] = await Promise.all([
+      supabase.from('presupuestos').select('*,tipos_movimiento(nombre)').eq('admin_id', user.id).order('mes', { ascending: false }),
+      supabase.from('tipos_movimiento').select('*').eq('admin_id', user.id).order('tipo').order('nombre'),
+      supabase.from('movimientos').select('*').eq('admin_id', user.id),
+    ]);
+    setRows(presupuestos.data || []);
+    setTipos(tiposData.data || []);
+    setMovimientos(movimientosData.data || []);
+  }, [supabase, user.id]);
+  React.useEffect(() => { load(); }, [load]);
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setOpen(true);
+  }
+  function openEdit(row) {
+    setEditingId(row.id);
+    setForm({
+      mes: row.mes || month(),
+      tipo: row.tipo || 'egreso',
+      tipo_movimiento_id: row.tipo_movimiento_id || '',
+      categoria: row.categoria || '',
+      monto_limite: row.monto_limite ?? '',
+      notas: row.notas || '',
+    });
+    setOpen(true);
+  }
+  async function remove(row) {
+    if (!(await confirmAction(`Eliminar presupuesto ${row.categoria || row.tipos_movimiento?.nombre || ''}?`))) return;
+    const { error } = await supabase.from('presupuestos').delete().eq('id', row.id).eq('admin_id', user.id);
+    if (error) return notify(error.message);
+    await logAudit(supabase, user.id, 'presupuestos', 'delete', 'Presupuesto eliminado', row.id, row);
+    load();
+  }
+  async function save(event) {
+    event.preventDefault();
+    const selected = tipos.find((t) => t.id === form.tipo_movimiento_id);
+    const payload = {
+      ...form,
+      admin_id: user.id,
+      tipo_movimiento_id: form.tipo_movimiento_id || null,
+      categoria: selected?.nombre || form.categoria,
+      monto_limite: Number(form.monto_limite || 0),
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = editingId
+      ? await supabase.from('presupuestos').update(payload).eq('id', editingId).eq('admin_id', user.id)
+      : await supabase.from('presupuestos').insert(payload);
+    if (error) return notify(error.message);
+    await logAudit(supabase, user.id, 'presupuestos', editingId ? 'update' : 'insert', editingId ? 'Presupuesto actualizado' : 'Presupuesto creado', editingId, payload);
+    setOpen(false);
+    setEditingId(null);
+    setForm(emptyForm);
+    load();
+  }
+  const tipoOptions = tipos.filter((t) => t.tipo === form.tipo);
+  function usage(row) {
+    const used = movimientos
+      .filter((m) => m.fecha?.startsWith(row.mes) && m.tipo === row.tipo)
+      .filter((m) => (row.tipo_movimiento_id && m.tipo_movimiento_id === row.tipo_movimiento_id) || (!row.tipo_movimiento_id && (m.categoria || '') === (row.categoria || '')))
+      .reduce((sum, m) => sum + Number(m.monto || 0), 0);
+    const limit = Number(row.monto_limite || 0);
+    return { used, pct: limit ? Math.min(999, Math.round((used / limit) * 100)) : 0 };
+  }
+  return (
+    <>
+      <TableSection
+        title="Presupuestos"
+        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo presupuesto</button>}
+        columns={['Mes', 'Tipo', 'Categoría', 'Límite', 'Usado', 'Avance']}
+        rows={rows.map((row) => {
+          const u = usage(row);
+          return [row.mes, badge(row.tipo), row.tipos_movimiento?.nombre || row.categoria || '-', money(row.monto_limite), money(u.used), <div className="progress-cell"><div className="progress-bar"><span style={{ width: `${Math.min(100, u.pct)}%` }} /></div><b>{u.pct}%</b></div>, <RowActions onEdit={() => openEdit(row)} onDelete={() => remove(row)} />];
+        })}
+      />
+      <Modal open={open} title={editingId ? 'Editar presupuesto' : 'Nuevo presupuesto'} onClose={() => setOpen(false)}>
+        <form onSubmit={save}>
+          <div className="modal-body">
+            <div className="form-row">
+              <Field label="Mes" type="month" value={form.mes} onChange={(v) => setForm({ ...form, mes: v })} required />
+              <SelectField label="Tipo" value={form.tipo} onChange={(v) => setForm({ ...form, tipo: v, tipo_movimiento_id: '' })}><option value="ingreso">Ingreso</option><option value="egreso">Egreso</option></SelectField>
+            </div>
+            <SelectField label="Tipo de movimiento" value={form.tipo_movimiento_id} onChange={(v) => setForm({ ...form, tipo_movimiento_id: v })}>
+              <option value="">Usar categoría manual...</option>
+              {tipoOptions.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            </SelectField>
+            <Field label="Categoría manual" value={form.categoria} onChange={(v) => setForm({ ...form, categoria: v })} placeholder="Servicios, plataformas, proveedor..." />
+            <Field label="Monto límite" type="number" value={form.monto_limite} onChange={(v) => setForm({ ...form, monto_limite: v })} required />
+            <Field label="Notas" value={form.notas} onChange={(v) => setForm({ ...form, notas: v })} />
+          </div>
+          <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />Guardar</button></div>
+        </form>
+      </Modal>
+    </>
+  );
+}
+
+function Metas({ supabase, user }) {
+  const emptyForm = { nombre: '', descripcion: '', monto_objetivo: '', monto_actual: '', fecha_objetivo: '', estado: 'activa' };
+  const [rows, setRows] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [form, setForm] = React.useState(emptyForm);
+  const load = React.useCallback(() => supabase.from('metas').select('*').eq('admin_id', user.id).order('created_at', { ascending: false }).then(({ data }) => setRows(data || [])), [supabase, user.id]);
+  React.useEffect(() => { load(); }, [load]);
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setOpen(true);
+  }
+  function openEdit(row) {
+    setEditingId(row.id);
+    setForm({ nombre: row.nombre || '', descripcion: row.descripcion || '', monto_objetivo: row.monto_objetivo ?? '', monto_actual: row.monto_actual ?? '', fecha_objetivo: row.fecha_objetivo || '', estado: row.estado || 'activa' });
+    setOpen(true);
+  }
+  async function remove(row) {
+    if (!(await confirmAction(`Eliminar meta ${row.nombre || ''}?`))) return;
+    const { error } = await supabase.from('metas').delete().eq('id', row.id).eq('admin_id', user.id);
+    if (error) return notify(error.message);
+    await logAudit(supabase, user.id, 'metas', 'delete', 'Meta eliminada', row.id, row);
+    load();
+  }
+  async function save(event) {
+    event.preventDefault();
+    const payload = { ...form, admin_id: user.id, monto_objetivo: Number(form.monto_objetivo || 0), monto_actual: Number(form.monto_actual || 0), fecha_objetivo: form.fecha_objetivo || null, updated_at: new Date().toISOString() };
+    const { error } = editingId
+      ? await supabase.from('metas').update(payload).eq('id', editingId).eq('admin_id', user.id)
+      : await supabase.from('metas').insert(payload);
+    if (error) return notify(error.message);
+    await logAudit(supabase, user.id, 'metas', editingId ? 'update' : 'insert', editingId ? 'Meta actualizada' : 'Meta creada', editingId, payload);
+    setOpen(false);
+    setEditingId(null);
+    setForm(emptyForm);
+    load();
+  }
+  return (
+    <>
+      <TableSection
+        title="Metas financieras"
+        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva meta</button>}
+        columns={['Meta', 'Objetivo', 'Actual', 'Avance', 'Fecha', 'Estado']}
+        rows={rows.map((row) => {
+          const pct = Number(row.monto_objetivo || 0) ? Math.round((Number(row.monto_actual || 0) / Number(row.monto_objetivo || 0)) * 100) : 0;
+          return [row.nombre, money(row.monto_objetivo), money(row.monto_actual), <div className="progress-cell"><div className="progress-bar"><span style={{ width: `${Math.min(100, pct)}%` }} /></div><b>{pct}%</b></div>, dateFmt(row.fecha_objetivo), badge(row.estado), <RowActions onEdit={() => openEdit(row)} onDelete={() => remove(row)} />];
+        })}
+      />
+      <Modal open={open} title={editingId ? 'Editar meta' : 'Nueva meta'} onClose={() => setOpen(false)}>
+        <form onSubmit={save}>
+          <div className="modal-body">
+            <Field label="Nombre" value={form.nombre} onChange={(v) => setForm({ ...form, nombre: v })} required />
+            <Field label="Descripción" value={form.descripcion} onChange={(v) => setForm({ ...form, descripcion: v })} />
+            <div className="form-row">
+              <Field label="Monto objetivo" type="number" value={form.monto_objetivo} onChange={(v) => setForm({ ...form, monto_objetivo: v })} required />
+              <Field label="Monto actual" type="number" value={form.monto_actual} onChange={(v) => setForm({ ...form, monto_actual: v })} />
+            </div>
+            <div className="form-row">
+              <Field label="Fecha objetivo" type="date" value={form.fecha_objetivo} onChange={(v) => setForm({ ...form, fecha_objetivo: v })} />
+              <SelectField label="Estado" value={form.estado} onChange={(v) => setForm({ ...form, estado: v })}><option value="activa">Activa</option><option value="completada">Completada</option><option value="pausada">Pausada</option></SelectField>
+            </div>
+          </div>
+          <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />Guardar</button></div>
+        </form>
+      </Modal>
+    </>
+  );
+}
+
+function Backup({ supabase, user }) {
+  const [status, setStatus] = React.useState('');
+  async function collectData() {
+    const tables = ['profiles', 'clientes', 'cuentas', 'deudas', 'pagos', 'movimientos', 'tipos_movimiento', 'presupuestos', 'metas', 'auditoria'];
+    const result = {};
+    for (const table of tables) {
+      const query = supabase.from(table).select('*');
+      const { data, error } = table === 'profiles' ? await query.eq('id', user.id) : await query.eq('admin_id', user.id);
+      result[table] = error ? { error: error.message } : data || [];
+    }
+    return result;
+  }
+  async function exportJson() {
+    setStatus('Preparando backup...');
+    const data = await collectData();
+    downloadText(`fintrack-backup-${today()}.json`, JSON.stringify({ exported_at: new Date().toISOString(), user_id: user.id, data }, null, 2));
+    setStatus('Backup JSON generado.');
+  }
+  async function exportCsv(table) {
+    const data = await collectData();
+    const rows = Array.isArray(data[table]) ? data[table] : [];
+    downloadText(`fintrack-${table}-${today()}.csv`, toCsv(rows), 'text/csv');
+    setStatus(`CSV de ${table} generado.`);
+  }
+  return (
+    <div className="grid-2">
+      <div className="card"><div className="card-header"><h3>Backup completo</h3></div><div className="card-body">
+        <p className="muted">Exporta una copia JSON con tus datos principales. Esto no restaura datos automáticamente; sirve como respaldo y auditoría.</p>
+        <button className="btn btn-primary backup-button" onClick={exportJson}><FileDown size={16} />Descargar backup JSON</button>
+        {status && <div className="connection-status success">{status}</div>}
+      </div></div>
+      <div className="card"><div className="card-header"><h3>Exportar CSV</h3></div><div className="card-body backup-actions">
+        {['clientes', 'cuentas', 'deudas', 'pagos', 'movimientos', 'presupuestos', 'metas'].map((table) => <button key={table} className="btn" onClick={() => exportCsv(table)}><FileDown size={16} />{table}</button>)}
+      </div></div>
+    </div>
+  );
+}
+
+function Auditoria({ supabase, user }) {
   const [rows, setRows] = React.useState([]);
   React.useEffect(() => {
+    supabase.from('auditoria').select('*').eq('admin_id', user.id).order('created_at', { ascending: false }).limit(200).then(({ data }) => setRows(data || []));
+  }, [supabase, user.id]);
+  return <TableSection title="Auditoría" columns={['Fecha', 'Tabla', 'Acción', 'Descripción']} rows={rows.map((row) => [new Date(row.created_at).toLocaleString('es-PE'), row.tabla, row.accion, row.descripcion || '-'])} />;
+}
+
+function Reportes({ supabase, user }) {
+  const [rows, setRows] = React.useState([]);
+  const [movimientos, setMovimientos] = React.useState([]);
+  const [presupuestos, setPresupuestos] = React.useState([]);
+  const [metas, setMetas] = React.useState([]);
+  React.useEffect(() => {
     supabase.from('deudas').select('*,clientes(nombre,apellido)').eq('admin_id', user.id).then(({ data }) => setRows(data || []));
+    supabase.from('movimientos').select('*,tipos_movimiento(nombre)').eq('admin_id', user.id).then(({ data }) => setMovimientos(data || []));
+    supabase.from('presupuestos').select('*,tipos_movimiento(nombre)').eq('admin_id', user.id).then(({ data }) => setPresupuestos(data || []));
+    supabase.from('metas').select('*').eq('admin_id', user.id).then(({ data }) => setMetas(data || []));
   }, [supabase, user.id]);
   const summary = rows.reduce((map, d) => {
     const name = `${d.clientes?.nombre || ''} ${d.clientes?.apellido || ''}`;
@@ -1195,7 +1646,39 @@ function Reportes({ supabase, user }) {
     return map;
   }, {});
   const tableRows = Object.entries(summary).map(([name, r]) => [name, money(r.total), money(r.pagado), money(r.total - r.pagado), r.total - r.pagado <= 0 ? badge('pagado') : badge('vencido')]);
-  return <TableSection title="Resumen por cliente" columns={['Cliente', 'Deuda total', 'Pagado', 'Pendiente', 'Estado']} rows={tableRows} />;
+  const exportClientesCsv = () => {
+    const csvRows = Object.entries(summary).map(([cliente, r]) => ({
+      cliente,
+      deuda_total: Number(r.total || 0).toFixed(2),
+      pagado: Number(r.pagado || 0).toFixed(2),
+      pendiente: Number((r.total || 0) - (r.pagado || 0)).toFixed(2),
+      estado: r.total - r.pagado <= 0 ? 'Pagado' : 'Pendiente',
+    }));
+    downloadText(`fintrack-resumen-clientes-${today()}.csv`, toCsv(csvRows), 'text/csv');
+  };
+  const ingresos = movimientos.filter((m) => m.tipo === 'ingreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
+  const egresos = movimientos.filter((m) => m.tipo === 'egreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
+  const movimientosPorTipo = movimientos.reduce((map, m) => {
+    const key = `${m.tipo}:${m.tipos_movimiento?.nombre || m.categoria || 'Sin tipo'}`;
+    map[key] ||= { tipo: m.tipo, categoria: m.tipos_movimiento?.nombre || m.categoria || 'Sin tipo', total: 0 };
+    map[key].total += Number(m.monto || 0);
+    return map;
+  }, {});
+  const exportResumen = () => downloadText(`fintrack-reporte-${today()}.json`, JSON.stringify({ deudas: summary, movimientos: Object.values(movimientosPorTipo), presupuestos, metas }, null, 2));
+  return (
+    <>
+      <div className="metrics-grid">
+        <MetricCard icon={<TrendingUp />} label="Ingresos acumulados" value={money(ingresos)} helper={`${movimientos.filter((m) => m.tipo === 'ingreso').length} movimientos`} />
+        <MetricCard icon={<TrendingDown />} label="Egresos acumulados" value={money(egresos)} helper={`${movimientos.filter((m) => m.tipo === 'egreso').length} movimientos`} danger />
+        <MetricCard icon={<ClipboardList />} label="Presupuestos" value={presupuestos.length} helper="Controles configurados" />
+        <MetricCard icon={<Target />} label="Metas activas" value={metas.filter((m) => m.estado === 'activa').length} helper={`${metas.length} metas registradas`} />
+      </div>
+      <div className="action-bar"><div /><button className="btn btn-primary" onClick={exportResumen}><FileDown size={16} />Exportar reporte JSON</button></div>
+      <TableSection title="Resumen por cliente" columns={['Cliente', 'Deuda total', 'Pagado', 'Pendiente', 'Estado']} rows={tableRows} onExport={exportClientesCsv} />
+      <div className="report-spacer" />
+      <TableSection title="Ingresos y egresos por tipo" columns={['Tipo', 'Categoría', 'Total']} rows={Object.values(movimientosPorTipo).map((row) => [badge(row.tipo), row.categoria, money(row.total)])} />
+    </>
+  );
 }
 
 function Perfil({ supabase, user, profile, onSaved }) {
@@ -1217,8 +1700,7 @@ function Perfil({ supabase, user, profile, onSaved }) {
   async function save(event) {
     event.preventDefault();
     setStatus('');
-    const payload = { ...form, updated_at: new Date().toISOString() };
-    const { error } = await supabase.from('profiles').update(payload).eq('id', user.id);
+    const { error } = await updateProfile({ supabase, userId: user.id, form });
     if (error) {
       setStatus(error.message);
       return;
@@ -1237,14 +1719,7 @@ function Perfil({ supabase, user, profile, onSaved }) {
       setPinStatus('La confirmación del PIN no coincide.');
       return;
     }
-    const salt = randomHex(16);
-    const pin_hash = await hashPin(pinForm.pin, salt);
-    const { error } = await supabase.from('profiles').update({
-      pin_hash,
-      pin_salt: salt,
-      pin_updated_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq('id', user.id);
+    const { error } = await updateMobilePin({ supabase, userId: user.id, pin: pinForm.pin });
     if (error) {
       setPinStatus(error.message);
       return;
@@ -1282,41 +1757,6 @@ function Perfil({ supabase, user, profile, onSaved }) {
   </div>;
 }
 
-function Modal({ open, title, onClose, children }) {
-  if (!open) return null;
-  return (
-    <div className="modal-overlay open" onMouseDown={onClose}>
-      <div className="modal" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button className="close-btn" onClick={onClose} type="button">X</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function RowActions({ onEdit, onDelete }) {
-  return (
-    <div className="row-actions">
-      <button type="button" className="btn btn-sm btn-icon" onClick={onEdit} title="Editar"><Pencil size={14} /></button>
-      <button type="button" className="btn btn-sm btn-icon btn-danger" onClick={onDelete} title="Eliminar"><Trash2 size={14} /></button>
-    </div>
-  );
-}
-
-function TableSection({ title, columns, rows, search, setSearch, action }) {
-  const columnCount = Math.max(columns.length, ...rows.map((row) => row.length), 0);
-  const visibleColumns = [...columns, ...Array.from({ length: columnCount - columns.length }, () => 'Acciones')];
-  return (
-    <>
-      {(setSearch || action) && <div className="action-bar"><div>{setSearch && <div className="search-wrap"><Search size={16} /><input className="search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Buscar ${title.toLowerCase()}...`} /></div>}</div>{action}</div>}
-      <div className="card"><div className="card-header"><h3>{title}</h3>{title === 'Resumen por cliente' && <button className="btn btn-sm"><Download size={14} />Exportar CSV</button>}</div><div className="table-wrap"><table><thead><tr>{visibleColumns.map((c, i) => <th key={`${c}-${i}`}>{c}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>) : <tr><td colSpan={columnCount || columns.length}><div className="empty-state"><p>Sin datos</p></div></td></tr>}</tbody></table></div></div>
-    </>
-  );
-}
-
 createRoot(document.getElementById('root')).render(<App />);
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -1324,4 +1764,8 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
+
+
+
+
 
