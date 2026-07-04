@@ -8,6 +8,7 @@ Ejecuta este archivo completo en Supabase SQL Editor:
 ../supabase/sql/FINTRACK-FEATURES-SCHEMA.sql
 ../supabase/sql/DEUDAS-PRESTAMOS-SCHEMA.sql
 ../supabase/sql/PRESTAMOS-RECIBIDOS-SCHEMA.sql
+../supabase/sql/ADMIN-USUARIOS-SCHEMA.sql
 ```
 
 Sin ese SQL, las pantallas nuevas pueden abrir, pero Supabase devolvera errores porque aun no existen las tablas `presupuestos`, `metas` y `auditoria`.
@@ -56,6 +57,11 @@ Sin ese SQL, las pantallas nuevas pueden abrir, pero Supabase devolvera errores 
   - reduce el saldo pendiente que debes;
   - permite editar y eliminar con reversion contable.
 - Todas las tablas usan paginacion.
+- Administracion de usuarios:
+  - solo visible para rol admin;
+  - permite activar/desactivar usuarios;
+  - permite eliminacion logica;
+  - no permite modificar/eliminar el usuario actual.
 - Preparacion para adjuntos:
   - columnas `comprobante_url` en `movimientos` y `pagos`.
 

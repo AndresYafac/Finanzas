@@ -1,12 +1,24 @@
 ﻿import React from 'react';
-import { Download, Pencil, Search, Trash2, TrendingUp } from 'lucide-react';
+import { Download, Pencil, Search, Trash2 } from 'lucide-react';
+
+function AppLogoIcon({ size = 30 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <path d="M14 23.5h36a6 6 0 0 1 6 6v16a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6v-16a6 6 0 0 1 6-6Z" stroke="currentColor" strokeWidth="5" />
+      <path d="M16 23.5 40 12h5a5 5 0 0 1 5 5v6.5" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M42 36h14v10H42a5 5 0 0 1 0-10Z" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
+      <path d="M20 36h12" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <circle cx="45" cy="41" r="2.8" fill="currentColor" />
+    </svg>
+  );
+}
 
 export function AuthCard({ title, children }) {
   return (
     <div id="auth-screen">
       <div className="auth-card">
         <div className="auth-logo">
-          <div className="logo-icon"><TrendingUp /></div>
+          <div className="logo-icon"><AppLogoIcon /></div>
           <h1>{title}</h1>
           <p>Sistema de gestión financiera</p>
         </div>
@@ -16,7 +28,7 @@ export function AuthCard({ title, children }) {
   );
 }
 
-export function AppDialogs({ toast, onCloseToast, confirmState, setConfirmState }) {
+export function AppDialogs({ toast, onCloseToast, confirmState, setConfirmState, busy }) {
   function answer(value) {
     confirmState?.resolve(value);
     setConfirmState(null);
@@ -38,6 +50,14 @@ export function AppDialogs({ toast, onCloseToast, confirmState, setConfirmState 
               <button className="btn" type="button" onClick={() => answer(false)}>Cancelar</button>
               <button className="btn btn-danger" type="button" onClick={() => answer(true)}>Confirmar</button>
             </div>
+          </div>
+        </div>
+      )}
+      {busy?.active && (
+        <div className="busy-overlay">
+          <div className="busy-card">
+            <span className="busy-spinner" />
+            <strong>{busy.message || 'Procesando...'}</strong>
           </div>
         </div>
       )}

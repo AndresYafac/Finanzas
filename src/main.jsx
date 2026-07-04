@@ -15,6 +15,8 @@ import {
   FileDown,
   LayoutDashboard,
   LogOut,
+  Menu,
+  Pencil,
   Plus,
   ShieldCheck,
   Settings,
@@ -31,22 +33,49 @@ import { LOCKED_KEY, REMEMBER_EMAIL_KEY, REMEMBER_KEY } from './constants/authSt
 import { clearRememberedAccount, signInWithPassword, signUpUser } from './controllers/auth.controller';
 import { updateMobilePin, updateProfile } from './controllers/profile.controller';
 import { AppDialogs, AuthCard, Field, Modal, RowActions, SelectField, TableSection } from './components/ui';
-import { clearFeedbackHandlers, confirmAction, notify, setFeedbackHandlers } from './services/feedback';
+import { clearFeedbackHandlers, confirmAction, hideBusy, notify, setFeedbackHandlers, showBusy } from './services/feedback';
 import { calcEstado, dateFmt, money, month, today } from './utils/format';
 import { hashPin, isMobileViewport } from './utils/security';
 import './styles.css';
+
+const LAST_PAGE_KEY = 'fintrack_last_page';
+const PAGE_IDS = [
+  'dashboard',
+  'clientes',
+  'cuentas',
+  'deudas',
+  'prestamos',
+  'cobros-prestamos',
+  'prestamos-recibidos',
+  'pagos-prestamos-recibidos',
+  'pagos',
+  'movimientos',
+  'presupuestos',
+  'metas',
+  'reportes',
+  'backup',
+  'auditoria',
+  'perfil',
+  'usuarios-admin',
+  'config',
+];
 
 function App() {
   const [supabase, setSupabase] = React.useState(createStoredClient);
   const [session, setSession] = React.useState(null);
   const [profile, setProfile] = React.useState(null);
-  const [page, setPage] = React.useState('dashboard');
+  const [page, setPage] = React.useState(() => {
+    const savedPage = localStorage.getItem(LAST_PAGE_KEY);
+    return PAGE_IDS.includes(savedPage) ? savedPage : 'dashboard';
+  });
   const [message, setMessage] = React.useState('');
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [toast, setToast] = React.useState(null);
   const [confirmState, setConfirmState] = React.useState(null);
+  const [busy, setBusy] = React.useState({ active: false, message: '' });
   const [installPrompt, setInstallPrompt] = React.useState(null);
   const [locked, setLocked] = React.useState(() => localStorage.getItem(LOCKED_KEY) === '1');
+  const [sidebarHidden, setSidebarHidden] = React.useState(() => localStorage.getItem('fintrack_sidebar_hidden') === '1');
 
   React.useEffect(() => {
     setFeedbackHandlers({
@@ -56,6 +85,7 @@ function App() {
         window.__fintrackToastTimer = window.setTimeout(() => setToast(null), 4500);
       },
       onConfirm: (question) => new Promise((resolve) => setConfirmState({ question, resolve })),
+      onBusy: setBusy,
     });
     return clearFeedbackHandlers;
   }, []);
@@ -84,6 +114,14 @@ function App() {
       }
       const { data, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
       if (error) setMessage(error.message);
+      if (data && (data.activo === false || data.deleted_at)) {
+        setMessage('Tu usuario está desactivado. Contacta al administrador.');
+        clearRememberedAccount();
+        await supabase.auth.signOut();
+        setSession(null);
+        setProfile(null);
+        return;
+      }
       setProfile(data || {});
     }
     loadProfile();
@@ -96,11 +134,23 @@ function App() {
     }
   }, [locked, profile]);
 
-  if (!supabase) return <Setup onReady={setSupabase} />;
-  if (!session) return <Auth supabase={supabase} message={message} setMessage={setMessage} />;
-  if (locked && !profile) return <AuthCard title="Desbloquear FinTrack"><p className="muted">Cargando cuenta recordada...</p></AuthCard>;
+  React.useEffect(() => {
+    if (!profile) return;
+    const isAdminProfile = profile?.role === 'admin';
+    const adminOnly = ['config', 'usuarios-admin'];
+    if (!PAGE_IDS.includes(page) || (adminOnly.includes(page) && !isAdminProfile)) {
+      setPage('dashboard');
+      localStorage.setItem(LAST_PAGE_KEY, 'dashboard');
+      return;
+    }
+    localStorage.setItem(LAST_PAGE_KEY, page);
+  }, [page, profile]);
+
+  if (!supabase) return <><Setup onReady={setSupabase} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
+  if (!session) return <><Auth supabase={supabase} message={message} setMessage={setMessage} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
+  if (locked && !profile) return <><AuthCard title="Desbloquear FinTrack"><p className="muted">Cargando cuenta recordada...</p></AuthCard><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (locked && profile?.pin_hash) {
-    return <PinUnlock supabase={supabase} profile={profile} onUnlock={() => {
+    return <><PinUnlock supabase={supabase} profile={profile} onUnlock={() => {
       localStorage.removeItem(LOCKED_KEY);
       setLocked(false);
     }} onFullLogout={async () => {
@@ -109,7 +159,7 @@ function App() {
       setSession(null);
       setProfile(null);
       setLocked(false);
-    }} />;
+    }} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   }
 
   const isAdmin = profile?.role === 'admin';
@@ -120,12 +170,12 @@ function App() {
     ]],
     ['finanzas', [
       ['cuentas', 'Cuentas bancarias', Building2, true],
-      ['deudas', 'Deudas', CreditCard, true],
-      ['prestamos', 'Préstamos', TrendingDown, true],
-      ['cobros-prestamos', 'Cobros préstamos', TrendingUp, true],
+      ['deudas', 'Pendientes por cobrar', CreditCard, true],
+      ['prestamos', 'Préstamos otorgados', TrendingDown, true],
+      ['cobros-prestamos', 'Cobros de préstamos', TrendingUp, true],
       ['prestamos-recibidos', 'Préstamos recibidos', Banknote, true],
-      ['pagos-prestamos-recibidos', 'Pagos préstamos recibidos', TrendingDown, true],
-      ['pagos', 'Pagos', Banknote, true],
+      ['pagos-prestamos-recibidos', 'Pagos de préstamos', TrendingDown, true],
+      ['pagos', 'Cobros generales', Banknote, true],
       ['movimientos', 'Ingresos / Egresos', Wallet, true],
       ['presupuestos', 'Presupuestos', ClipboardList, true],
       ['metas', 'Metas', Target, true],
@@ -137,6 +187,7 @@ function App() {
     ]],
     ['sistema', [
       ['perfil', 'Mi perfil', UserCircle, true],
+      ['usuarios-admin', 'Usuarios', Users, isAdmin],
       ['config', 'Configuración', Settings, isAdmin],
     ]],
   ];
@@ -155,16 +206,24 @@ function App() {
   }
 
   function openPage(nextPage) {
-    if (nextPage === 'config' && !isAdmin) return;
+    if ((nextPage === 'config' || nextPage === 'usuarios-admin') && !isAdmin) return;
     setPage(nextPage);
   }
 
+  function toggleSidebar() {
+    setSidebarHidden((current) => {
+      const next = !current;
+      localStorage.setItem('fintrack_sidebar_hidden', next ? '1' : '0');
+      return next;
+    });
+  }
+
   return (
-    <div className="layout">
+    <div className={`layout ${sidebarHidden ? 'sidebar-hidden' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-logo">
           <div className="brand">
-            <div className="brand-icon"><TrendingUp size={20} /></div>
+            <div className="brand-icon"><AppLogoIcon /></div>
             <div>
               <div className="brand-name">FinTrack Pro</div>
               <div className="brand-sub">Panel de control</div>
@@ -197,8 +256,11 @@ function App() {
       <main className="main">
         <div className="topbar">
           <div className="topbar-left">
-            <h2>{pageTitle(page, isAdmin)[0]}</h2>
-            <p>{pageTitle(page, isAdmin)[1]}</p>
+            <button className="btn btn-icon sidebar-toggle" type="button" onClick={toggleSidebar} title={sidebarHidden ? 'Mostrar menú' : 'Ocultar menú'}><Menu size={18} /></button>
+            <div>
+              <h2>{pageTitle(page, isAdmin)[0]}</h2>
+              <p>{pageTitle(page, isAdmin)[1]}</p>
+            </div>
           </div>
           <div className="topbar-actions">
             {installPrompt && <button className="btn btn-primary" onClick={async () => {
@@ -228,10 +290,11 @@ function App() {
           {page === 'backup' && <Backup supabase={supabase} user={session.user} />}
           {page === 'auditoria' && <Auditoria supabase={supabase} user={session.user} />}
           {page === 'perfil' && <Perfil supabase={supabase} user={session.user} profile={profile} onSaved={() => setRefreshKey((x) => x + 1)} />}
+          {page === 'usuarios-admin' && isAdmin && <UsuariosAdmin supabase={supabase} user={session.user} />}
           {page === 'config' && isAdmin && <Config onReady={setSupabase} />}
         </div>
       </main>
-      <AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} />
+      <AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} />
     </div>
   );
 }
@@ -243,6 +306,7 @@ function fullName(profile) {
   return [profile?.nombre, profile?.apellido].filter(Boolean).join(' ');
 }
 function downloadText(filename, content, type = 'application/json') {
+  showBusy('Descargando...');
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -250,6 +314,7 @@ function downloadText(filename, content, type = 'application/json') {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+  window.setTimeout(() => hideBusy(), 350);
 }
 function toCsv(rows) {
   if (!rows.length) return '';
@@ -263,14 +328,14 @@ async function logAudit(supabase, userId, tabla, accion, descripcion, registro_i
 function pageTitle(page, isAdmin) {
   const labels = {
     dashboard: ['Dashboard', 'Resumen general de finanzas'],
-    clientes: ['Clientes', 'Gestión de clientes y deudores'],
+    clientes: ['Clientes', 'Personas registradas por el administrador'],
     cuentas: ['Cuentas bancarias', 'Administra tus cuentas y billeteras'],
-    deudas: ['Deudas', 'Ventas, servicios y pendientes por cobrar'],
-    prestamos: ['Préstamos', 'Dinero desembolsado a clientes'],
-    'cobros-prestamos': ['Cobros de préstamos', 'Pagos recibidos por préstamos'],
+    deudas: ['Pendientes por cobrar', 'Deudas que tus clientes tienen contigo'],
+    prestamos: ['Préstamos otorgados', 'Dinero que prestas a clientes'],
+    'cobros-prestamos': ['Cobros de préstamos otorgados', 'Pagos recibidos por préstamos que diste'],
     'prestamos-recibidos': ['Préstamos recibidos', 'Dinero que te prestaron a ti'],
     'pagos-prestamos-recibidos': ['Pagos de préstamos recibidos', 'Cuotas que pagas a tus acreedores'],
-    pagos: ['Pagos', 'Historial de pagos recibidos'],
+    pagos: ['Cobros generales', 'Pagos recibidos por ventas, servicios o pendientes'],
     movimientos: ['Ingresos y egresos', 'Movimientos generales de caja'],
     presupuestos: ['Presupuestos', 'Control mensual por categoría'],
     metas: ['Metas financieras', 'Objetivos de ahorro y crecimiento'],
@@ -278,6 +343,7 @@ function pageTitle(page, isAdmin) {
     backup: ['Backup', 'Exportación de datos'],
     auditoria: ['Auditoría', 'Historial de acciones importantes'],
     perfil: ['Mi perfil', 'Información personal y seguridad'],
+    'usuarios-admin': ['Usuarios', 'Activación y control de accesos'],
     config: ['Configuración', 'Conexión a base de datos'],
   };
   return labels[page] || ['FinTrack', ''];
@@ -298,6 +364,18 @@ function badge(estado) {
   return <span className={`badge ${className}`}>{text}</span>;
 }
 
+function AppLogoIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <path d="M14 23.5h36a6 6 0 0 1 6 6v16a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6v-16a6 6 0 0 1 6-6Z" stroke="currentColor" strokeWidth="5" />
+      <path d="M16 23.5 40 12h5a5 5 0 0 1 5 5v6.5" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M42 36h14v10H42a5 5 0 0 1 0-10Z" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
+      <path d="M20 36h12" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <circle cx="45" cy="41" r="2.8" fill="currentColor" />
+    </svg>
+  );
+}
+
 function Setup({ onReady }) {
   return <AuthCard title="Conectar Supabase"><Config onReady={onReady} compact /></AuthCard>;
 }
@@ -307,33 +385,41 @@ function Auth({ supabase, message, setMessage }) {
   const [form, setForm] = React.useState({ nombre: '', apellido: '', email: localStorage.getItem(REMEMBER_EMAIL_KEY) || '', password: '' });
   const [showPassword, setShowPassword] = React.useState(false);
   const [remember, setRemember] = React.useState(localStorage.getItem(REMEMBER_KEY) === '1');
+  const [loading, setLoading] = React.useState(false);
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
   async function submit(event) {
     event.preventDefault();
     setMessage('');
-    if (mode === 'login') {
-      const { error } = await signInWithPassword({
+    setLoading(true);
+    try {
+      if (mode === 'login') {
+        const { error } = await signInWithPassword({
+          supabase,
+          email: form.email,
+          password: form.password,
+          remember,
+        });
+        if (error) setMessage(error.message);
+        return;
+      }
+      const { error } = await signUpUser({
         supabase,
         email: form.email,
         password: form.password,
-        remember,
+        nombre: form.nombre,
+        apellido: form.apellido,
       });
-      if (error) setMessage(error.message);
-      return;
-    }
-    const { error } = await signUpUser({
-      supabase,
-      email: form.email,
-      password: form.password,
-      nombre: form.nombre,
-      apellido: form.apellido,
-    });
-    if (error) {
-      const rateLimited = error.status === 429 || /rate limit|email rate/i.test(error.message);
-      setMessage(rateLimited ? 'Supabase alcanzó el límite temporal de correos. Espera o configura SMTP propio.' : error.message);
-    } else {
-      setMessage('Correo de confirmación enviado. Revisa bandeja de entrada y spam.');
+      if (error) {
+        const rateLimited = error.status === 429 || /rate limit|email rate/i.test(error.message);
+        setMessage(rateLimited ? 'Supabase alcanzó el límite temporal de correos. Espera o configura SMTP propio.' : error.message);
+      } else {
+        setMessage('Correo de confirmación enviado. Revisa bandeja de entrada y spam.');
+      }
+    } catch (error) {
+      setMessage(error.message || 'No se pudo iniciar sesión. Revisa tu conexión.');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -366,7 +452,7 @@ function Auth({ supabase, message, setMessage }) {
             <span>Recordar cuenta y usar PIN en este celular</span>
           </label>
         )}
-        <button className="btn-full">{mode === 'login' ? 'Entrar al sistema' : 'Crear cuenta de cliente'}</button>
+        <button className="btn-full" disabled={loading}>{loading ? (mode === 'login' ? 'Ingresando...' : 'Creando cuenta...') : (mode === 'login' ? 'Entrar al sistema' : 'Crear cuenta de cliente')}</button>
         {message && <div className="auth-error">{message}</div>}
       </form>
     </AuthCard>
@@ -426,24 +512,29 @@ function Config({ onReady, compact = false }) {
   const [url, setUrl] = React.useState(localStorage.getItem('sb_url') || import.meta.env.VITE_SUPABASE_URL || '');
   const [key, setKey] = React.useState(localStorage.getItem('sb_key') || import.meta.env.VITE_SUPABASE_ANON_KEY || '');
   const [status, setStatus] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
 
   async function save(event) {
     event.preventDefault();
+    setLoading(true);
     const cleanUrl = url.trim().replace(/\/+$/, '');
     if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(cleanUrl)) {
       setStatus('La URL debe tener formato https://proyecto.supabase.co');
+      setLoading(false);
       return;
     }
     const client = createSupabaseClient(cleanUrl, key.trim());
     const { error } = await client.from('profiles').select('id').limit(1);
     if (error && !/profiles|schema cache|relation/i.test(error.message) && error.code !== '42501') {
       setStatus(error.message);
+      setLoading(false);
       return;
     }
     localStorage.setItem('sb_url', cleanUrl);
     localStorage.setItem('sb_key', key.trim());
     setStatus('Conexión guardada correctamente.');
     onReady(client);
+    setLoading(false);
   }
 
   return (
@@ -455,7 +546,7 @@ function Config({ onReady, compact = false }) {
           <form onSubmit={save}>
             <Field label="Supabase URL" value={url} onChange={setUrl} placeholder="https://xxxx.supabase.co" />
             <Field label="Publishable / Anon Key" type="password" value={key} onChange={setKey} />
-            <button className="btn btn-primary">Guardar conexión</button>
+            <button className="btn btn-primary" disabled={loading}>{loading ? 'Guardando...' : 'Guardar conexión'}</button>
             {status && <div className="connection-status success">{status}</div>}
           </form>
         </div>
@@ -464,8 +555,27 @@ function Config({ onReady, compact = false }) {
   );
 }
 
+const DASHBOARD_CARDS_KEY = 'fintrack_dashboard_cards';
+const DASHBOARD_CARD_OPTIONS = [
+  { id: 'balance', label: 'Balance de cuentas' },
+  { id: 'pendiente', label: 'Pendiente por cobrar' },
+  { id: 'pagos', label: 'Cobros del mes' },
+  { id: 'movimientos', label: 'Ingresos / Egresos' },
+];
+const DEFAULT_DASHBOARD_CARDS = DASHBOARD_CARD_OPTIONS.map((item) => item.id);
+
 function Dashboard({ supabase, user, isAdmin }) {
   const [data, setData] = React.useState({ deudas: [], pagos: [], cuentas: [], movimientos: [], presupuestos: [], metas: [] });
+  const [configOpen, setConfigOpen] = React.useState(false);
+  const [draftCards, setDraftCards] = React.useState(DEFAULT_DASHBOARD_CARDS);
+  const [visibleCards, setVisibleCards] = React.useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DASHBOARD_CARDS_KEY) || 'null');
+      return Array.isArray(saved) && saved.length ? saved : DEFAULT_DASHBOARD_CARDS;
+    } catch {
+      return DEFAULT_DASHBOARD_CARDS;
+    }
+  });
   React.useEffect(() => {
     async function load() {
       const deudasQ = supabase.from('deudas').select('*,clientes(nombre,apellido)');
@@ -486,6 +596,25 @@ function Dashboard({ supabase, user, isAdmin }) {
     }
     load();
   }, [supabase, user.id, isAdmin]);
+  React.useEffect(() => {
+    localStorage.setItem(DASHBOARD_CARDS_KEY, JSON.stringify(visibleCards));
+  }, [visibleCards]);
+  const isVisible = (id) => visibleCards.includes(id);
+  function openDashboardConfig() {
+    setDraftCards(visibleCards);
+    setConfigOpen(true);
+  }
+  function closeDashboardConfig() {
+    setConfigOpen(false);
+    setDraftCards(visibleCards);
+  }
+  function saveDashboardConfig() {
+    setVisibleCards(draftCards);
+    setConfigOpen(false);
+  }
+  function toggleDraftCard(id) {
+    setDraftCards((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
   const pendiente = data.deudas.reduce((sum, d) => sum + Math.max(0, Number(d.monto_total || 0) - Number(d.monto_pagado || 0)), 0);
   const ingresos = data.movimientos.filter((m) => m.tipo === 'ingreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
   const egresos = data.movimientos.filter((m) => m.tipo === 'egreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
@@ -529,20 +658,42 @@ function Dashboard({ supabase, user, isAdmin }) {
 
   return (
     <>
-      <div className="metrics-grid">
-        <MetricCard icon={<Wallet />} label="Balance cuentas" value={money(balanceTotal)} helper={`${data.cuentas.length} cuentas activas`} chart={<MiniBarChart items={accountChart} />} />
-        <MetricCard icon={<CreditCard />} label="Pendiente por cobrar" value={money(pendiente)} helper={`${data.deudas.filter((d) => calcEstado(d) !== 'pagado').length} deudas activas`} danger chart={<MiniBarChart items={debtChart} danger />} />
-        <MetricCard icon={<Banknote />} label="Pagos del mes" value={money(pagosMes)} helper={`${data.pagos.filter((p) => p.fecha?.startsWith(month())).length} pagos`} chart={<MiniBarChart items={paymentsChart} />} />
-        <MetricCard icon={<TrendingUp />} label="Ingresos / Egresos" value={`${money(ingresos)} / ${money(egresos)}`} helper="Movimientos generales" chart={<MiniBarChart items={movementChart} split />} />
+      <div className="dashboard-toolbar">
+        <button className="btn" type="button" onClick={openDashboardConfig}><Settings size={16} />Configurar dashboard</button>
       </div>
+      <div className="metrics-grid">
+        {isVisible('balance') && <MetricCard icon={<Wallet />} label="Balance cuentas" value={money(balanceTotal)} helper={`${data.cuentas.length} cuentas activas`} chart={<MiniBarChart items={accountChart} />} />}
+        {isVisible('pendiente') && <MetricCard icon={<CreditCard />} label="Pendiente por cobrar" value={money(pendiente)} helper={`${data.deudas.filter((d) => calcEstado(d) !== 'pagado').length} pendientes activos`} danger chart={<MiniBarChart items={debtChart} danger />} />}
+        {isVisible('pagos') && <MetricCard icon={<Banknote />} label="Cobros del mes" value={money(pagosMes)} helper={`${data.pagos.filter((p) => p.fecha?.startsWith(month())).length} cobros`} chart={<MiniBarChart items={paymentsChart} />} />}
+        {isVisible('movimientos') && <MetricCard icon={<TrendingUp />} label="Ingresos / Egresos" value={`${money(ingresos)} / ${money(egresos)}`} helper="Movimientos generales" chart={<MiniBarChart items={movementChart} split />} />}
+      </div>
+      {!visibleCards.length && <div className="card empty-dashboard"><div className="card-body muted">Activa al menos una tarjeta desde Configurar dashboard.</div></div>}
       <div className="grid-2">
-        <ListCard title="Deudas por vencer" empty="Sin deudas por vencer" items={porVencer.map((d) => `${d.clientes?.nombre || ''} - ${d.descripcion}: ${money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}`)} />
-        <ListCard title="Últimos pagos registrados" empty="Sin pagos registrados" items={data.pagos.slice(0, 5).map((p) => `${dateFmt(p.fecha)} - ${p.clientes?.nombre || ''}: ${money(p.monto)}`)} />
+        <ListCard title="Pendientes por vencer" empty="Sin pendientes por vencer" items={porVencer.map((d) => `${d.clientes?.nombre || ''} - ${d.descripcion}: ${money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}`)} />
+        <ListCard title="Últimos cobros registrados" empty="Sin cobros registrados" items={data.pagos.slice(0, 5).map((p) => `${dateFmt(p.fecha)} - ${p.clientes?.nombre || ''}: ${money(p.monto)}`)} />
       </div>
       <div className="grid-2 dashboard-extra">
         <ListCard title="Alertas de presupuesto" empty="Sin presupuestos en alerta" items={presupuestoAlerts.map((p) => `${p.label}: ${money(p.usado)} de ${money(p.limite)} (${p.pct}%)`)} />
         <ListCard title="Metas próximas" empty="Sin metas próximas" items={metasAlerts.map((m) => `${m.nombre}: ${m.pct}% completado (${money(m.monto_actual)} / ${money(m.monto_objetivo)})`)} />
       </div>
+      <Modal open={configOpen} title="Configurar dashboard" onClose={closeDashboardConfig}>
+        <div className="modal-body">
+          <p className="muted modal-intro">Elige qué tarjetas principales quieres ver al entrar al sistema.</p>
+          <div className="dashboard-options">
+            {DASHBOARD_CARD_OPTIONS.map((card) => (
+              <label key={card.id} className="check-row">
+                <input type="checkbox" checked={draftCards.includes(card.id)} onChange={() => toggleDraftCard(card.id)} />
+                <span>{card.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn" type="button" onClick={() => setDraftCards(DEFAULT_DASHBOARD_CARDS)}>Restablecer</button>
+          <button className="btn" type="button" onClick={closeDashboardConfig}>Cancelar</button>
+          <button className="btn btn-primary" type="button" onClick={saveDashboardConfig}>Guardar</button>
+        </div>
+      </Modal>
     </>
   );
 }
@@ -891,7 +1042,7 @@ function Deudas({ supabase, user, isAdmin }) {
   return (
     <>
       <TableSection
-        title="Deudas"
+        title="Pendientes por cobrar"
         action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva deuda</button>}
         columns={['Cliente', 'Descripción', 'Tipo', 'Total', 'Pendiente', 'Vencimiento', 'Estado']}
         rows={deudas.map((d) => [`${d.clientes?.nombre || ''} ${d.clientes?.apellido || ''}`, d.descripcion, d.tipo, money(d.monto_total), money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0)), dateFmt(d.fecha_vencimiento), badge(d.estado), <RowActions onEdit={() => openEdit(d)} onDelete={() => remove(d)} />])}
@@ -1000,7 +1151,7 @@ function Prestamos({ supabase, user }) {
   return (
     <>
       <TableSection
-        title="Préstamos desembolsados"
+        title="Préstamos otorgados"
         action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo préstamo</button>}
         columns={['Cliente', 'Descripción', 'Cuenta origen', 'Desembolsado', 'Cobrado', 'Pendiente', 'Estado']}
         rows={prestamos.map((p) => [`${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.descripcion, p.cuentas ? `${p.cuentas.banco} - ${p.cuentas.tipo || ''}` : '-', money(p.monto_total), money(p.monto_pagado), money(Number(p.monto_total || 0) - Number(p.monto_pagado || 0)), badge(p.estado), <RowActions onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
@@ -1113,7 +1264,7 @@ function CobrosPrestamos({ supabase, user }) {
   return (
     <>
       <TableSection
-        title="Cobros de préstamos"
+        title="Cobros de préstamos otorgados"
         action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Registrar cobro</button>}
         columns={['Fecha', 'Cliente', 'Préstamo', 'Monto', 'Método', 'Cuenta destino']}
         rows={pagos.map((p) => [dateFmt(p.fecha), `${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.deudas?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
@@ -1453,7 +1604,7 @@ function Pagos({ supabase, user, isAdmin }) {
   return (
     <>
       <TableSection
-        title="Pagos"
+        title="Cobros generales"
         action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Registrar pago</button>}
         columns={['Fecha', 'Cliente', 'Deuda', 'Monto', 'Método', 'Cuenta']}
         rows={pagos.map((p) => [dateFmt(p.fecha), `${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.deudas?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
@@ -1863,13 +2014,41 @@ function Reportes({ supabase, user }) {
   const [movimientos, setMovimientos] = React.useState([]);
   const [presupuestos, setPresupuestos] = React.useState([]);
   const [metas, setMetas] = React.useState([]);
+  const [clientes, setClientes] = React.useState([]);
+  const [cuentas, setCuentas] = React.useState([]);
+  const [tipos, setTipos] = React.useState([]);
+  const defaultFilters = React.useCallback(() => ({
+    desde: `${month()}-01`,
+    hasta: today(),
+    cliente_id: '',
+    cuenta_id: '',
+    tipo: '',
+    tipo_movimiento_id: '',
+  }), []);
+  const [filters, setFilters] = React.useState(defaultFilters);
+  const setFilter = (field, value) => setFilters((current) => ({ ...current, [field]: value }));
   React.useEffect(() => {
     supabase.from('deudas').select('*,clientes(nombre,apellido)').eq('admin_id', user.id).then(({ data }) => setRows(data || []));
     supabase.from('movimientos').select('*,tipos_movimiento(nombre)').eq('admin_id', user.id).then(({ data }) => setMovimientos(data || []));
     supabase.from('presupuestos').select('*,tipos_movimiento(nombre)').eq('admin_id', user.id).then(({ data }) => setPresupuestos(data || []));
     supabase.from('metas').select('*').eq('admin_id', user.id).then(({ data }) => setMetas(data || []));
+    supabase.from('clientes').select('id,nombre,apellido').eq('admin_id', user.id).order('nombre').then(({ data }) => setClientes(data || []));
+    supabase.from('cuentas').select('id,banco,tipo').eq('admin_id', user.id).order('banco').then(({ data }) => setCuentas(data || []));
+    supabase.from('tipos_movimiento').select('id,nombre,tipo').eq('admin_id', user.id).order('nombre').then(({ data }) => setTipos(data || []));
   }, [supabase, user.id]);
-  const summary = rows.reduce((map, d) => {
+  const inDateRange = (fecha) => (!filters.desde || fecha >= filters.desde) && (!filters.hasta || fecha <= filters.hasta);
+  const filteredRows = rows.filter((d) => (
+    (!filters.cliente_id || d.cliente_id === filters.cliente_id) &&
+    (!filters.desde || (d.fecha_inicio || d.created_at || '').slice(0, 10) >= filters.desde) &&
+    (!filters.hasta || (d.fecha_inicio || d.created_at || '').slice(0, 10) <= filters.hasta)
+  ));
+  const filteredMovimientos = movimientos.filter((m) => (
+    inDateRange(m.fecha) &&
+    (!filters.cuenta_id || m.cuenta_id === filters.cuenta_id) &&
+    (!filters.tipo || m.tipo === filters.tipo) &&
+    (!filters.tipo_movimiento_id || m.tipo_movimiento_id === filters.tipo_movimiento_id)
+  ));
+  const summary = filteredRows.reduce((map, d) => {
     const name = `${d.clientes?.nombre || ''} ${d.clientes?.apellido || ''}`;
     map[name] ||= { total: 0, pagado: 0 };
     map[name].total += Number(d.monto_total || 0);
@@ -1887,20 +2066,58 @@ function Reportes({ supabase, user }) {
     }));
     downloadText(`fintrack-resumen-clientes-${today()}.csv`, toCsv(csvRows), 'text/csv');
   };
-  const ingresos = movimientos.filter((m) => m.tipo === 'ingreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
-  const egresos = movimientos.filter((m) => m.tipo === 'egreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
-  const movimientosPorTipo = movimientos.reduce((map, m) => {
+  const ingresos = filteredMovimientos.filter((m) => m.tipo === 'ingreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
+  const egresos = filteredMovimientos.filter((m) => m.tipo === 'egreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
+  const movimientosPorTipo = filteredMovimientos.reduce((map, m) => {
     const key = `${m.tipo}:${m.tipos_movimiento?.nombre || m.categoria || 'Sin tipo'}`;
     map[key] ||= { tipo: m.tipo, categoria: m.tipos_movimiento?.nombre || m.categoria || 'Sin tipo', total: 0 };
     map[key].total += Number(m.monto || 0);
     return map;
   }, {});
-  const exportResumen = () => downloadText(`fintrack-reporte-${today()}.json`, JSON.stringify({ deudas: summary, movimientos: Object.values(movimientosPorTipo), presupuestos, metas }, null, 2));
+  const filteredTipos = tipos.filter((tipo) => !filters.tipo || tipo.tipo === filters.tipo);
+  const exportResumen = () => downloadText(`fintrack-reporte-${today()}.json`, JSON.stringify({
+    filtros: filters,
+    pendientes: summary,
+    movimientos: Object.values(movimientosPorTipo),
+    presupuestos,
+    metas,
+  }, null, 2));
   return (
     <>
+      <div className="card report-filters">
+        <div className="card-header">
+          <h3>Filtros del reporte</h3>
+        </div>
+        <div className="card-body">
+          <div className="report-filter-grid">
+            <Field label="Desde" type="date" value={filters.desde} onChange={(value) => setFilter('desde', value)} />
+            <Field label="Hasta" type="date" value={filters.hasta} onChange={(value) => setFilter('hasta', value)} />
+            <SelectField label="Cliente" value={filters.cliente_id} onChange={(value) => setFilter('cliente_id', value)}>
+              <option value="">Todos los clientes</option>
+              {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nombre} {cliente.apellido}</option>)}
+            </SelectField>
+            <SelectField label="Cuenta" value={filters.cuenta_id} onChange={(value) => setFilter('cuenta_id', value)}>
+              <option value="">Todas las cuentas</option>
+              {cuentas.map((cuenta) => <option key={cuenta.id} value={cuenta.id}>{cuenta.banco} {cuenta.tipo ? `- ${cuenta.tipo}` : ''}</option>)}
+            </SelectField>
+            <SelectField label="Tipo" value={filters.tipo} onChange={(value) => setFilters((current) => ({ ...current, tipo: value, tipo_movimiento_id: '' }))}>
+              <option value="">Ingresos y egresos</option>
+              <option value="ingreso">Solo ingresos</option>
+              <option value="egreso">Solo egresos</option>
+            </SelectField>
+            <SelectField label="Categoría" value={filters.tipo_movimiento_id} onChange={(value) => setFilter('tipo_movimiento_id', value)}>
+              <option value="">Todas las categorías</option>
+              {filteredTipos.map((tipo) => <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>)}
+            </SelectField>
+          </div>
+          <div className="filter-actions">
+            <button className="btn" type="button" onClick={() => setFilters(defaultFilters())}>Limpiar filtros</button>
+          </div>
+        </div>
+      </div>
       <div className="metrics-grid">
-        <MetricCard icon={<TrendingUp />} label="Ingresos acumulados" value={money(ingresos)} helper={`${movimientos.filter((m) => m.tipo === 'ingreso').length} movimientos`} />
-        <MetricCard icon={<TrendingDown />} label="Egresos acumulados" value={money(egresos)} helper={`${movimientos.filter((m) => m.tipo === 'egreso').length} movimientos`} danger />
+        <MetricCard icon={<TrendingUp />} label="Ingresos filtrados" value={money(ingresos)} helper={`${filteredMovimientos.filter((m) => m.tipo === 'ingreso').length} movimientos`} />
+        <MetricCard icon={<TrendingDown />} label="Egresos filtrados" value={money(egresos)} helper={`${filteredMovimientos.filter((m) => m.tipo === 'egreso').length} movimientos`} danger />
         <MetricCard icon={<ClipboardList />} label="Presupuestos" value={presupuestos.length} helper="Controles configurados" />
         <MetricCard icon={<Target />} label="Metas activas" value={metas.filter((m) => m.estado === 'activa').length} helper={`${metas.length} metas registradas`} />
       </div>
@@ -1912,11 +2129,129 @@ function Reportes({ supabase, user }) {
   );
 }
 
+function UsuariosAdmin({ supabase, user }) {
+  const [rows, setRows] = React.useState([]);
+  const [query, setQuery] = React.useState('');
+  const [open, setOpen] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [form, setForm] = React.useState({ nombre: '', apellido: '', tipo_doc: 'DNI', documento: '', email_contacto: '', telefono: '', direccion: '', empresa: '', moneda: 'PEN', role: 'user' });
+  const load = React.useCallback(async () => {
+    const { data, error } = await supabase.rpc('admin_listar_usuarios');
+    if (error) {
+      notify(error.message);
+      return;
+    }
+    setRows(data || []);
+  }, [supabase]);
+  React.useEffect(() => { load(); }, [load]);
+  function openEdit(row) {
+    if (row.id === user.id) return notify('Edita tu propio usuario desde Mi perfil.');
+    setEditingId(row.id);
+    setForm({
+      nombre: row.nombre || '',
+      apellido: row.apellido || '',
+      tipo_doc: row.tipo_doc || 'DNI',
+      documento: row.documento || '',
+      email_contacto: row.email_contacto || '',
+      telefono: row.telefono || '',
+      direccion: row.direccion || '',
+      empresa: row.empresa || '',
+      moneda: row.moneda || 'PEN',
+      role: row.role || 'user',
+    });
+    setOpen(true);
+  }
+  async function save(event) {
+    event.preventDefault();
+    if (!editingId || editingId === user.id) return notify('No puedes editar tu propio usuario desde este módulo.');
+    const { error } = await supabase.rpc('admin_actualizar_usuario', {
+      p_user_id: editingId,
+      p_nombre: form.nombre,
+      p_apellido: form.apellido,
+      p_tipo_doc: form.tipo_doc,
+      p_documento: form.documento,
+      p_email_contacto: form.email_contacto,
+      p_telefono: form.telefono,
+      p_direccion: form.direccion,
+      p_empresa: form.empresa,
+      p_moneda: form.moneda,
+      p_role: form.role,
+    });
+    if (error) return notify(error.message);
+    notify('Usuario actualizado correctamente.', 'success');
+    setOpen(false);
+    setEditingId(null);
+    load();
+  }
+  async function toggle(row) {
+    if (row.id === user.id) return notify('No puedes modificar tu propio usuario.');
+    const next = !row.activo;
+    if (!(await confirmAction(`${next ? 'Activar' : 'Desactivar'} usuario ${row.email_contacto || row.nombre || ''}?`))) return;
+    const { error } = await supabase.rpc('admin_actualizar_usuario_estado', { p_user_id: row.id, p_activo: next });
+    if (error) return notify(error.message);
+    notify(next ? 'Usuario activado.' : 'Usuario desactivado.', 'success');
+    load();
+  }
+  async function remove(row) {
+    if (row.id === user.id) return notify('No puedes eliminar tu propio usuario.');
+    if (!(await confirmAction(`Eliminar usuario ${row.email_contacto || row.nombre || ''}? Esto lo desactivará y ocultará su acceso.`))) return;
+    const { error } = await supabase.rpc('admin_eliminar_usuario', { p_user_id: row.id });
+    if (error) return notify(error.message);
+    notify('Usuario eliminado lógicamente.', 'success');
+    load();
+  }
+  const filtered = rows.filter((row) => `${row.nombre || ''} ${row.apellido || ''} ${row.email_contacto || ''} ${row.role || ''}`.toLowerCase().includes(query.toLowerCase()));
+  return (
+    <>
+      <TableSection
+        title="Usuarios"
+        search={query}
+        setSearch={setQuery}
+        columns={['Usuario', 'Contacto', 'Rol', 'Estado', 'Registro']}
+        rows={filtered.map((row) => [
+          `${row.nombre || '-'} ${row.apellido || ''}`,
+          row.email_contacto || row.telefono || '-',
+          row.role || 'user',
+          row.deleted_at ? <span className="badge badge-red">Eliminado</span> : <span className={`badge ${row.activo ? 'badge-green' : 'badge-yellow'}`}>{row.activo ? 'Activo' : 'Inactivo'}</span>,
+          row.created_at ? new Date(row.created_at).toLocaleDateString('es-PE') : '-',
+          row.id === user.id ? <span className="muted">Usuario actual</span> : <div className="row-actions"><button className="btn btn-sm btn-icon" type="button" title="Editar" onClick={() => openEdit(row)}><Pencil size={14} /></button><button className="btn btn-sm" type="button" onClick={() => toggle(row)}>{row.activo ? 'Desactivar' : 'Activar'}</button><button className="btn btn-sm btn-danger" type="button" onClick={() => remove(row)}>Eliminar</button></div>,
+        ])}
+      />
+      <Modal open={open} title="Editar usuario" onClose={() => setOpen(false)}>
+        <form onSubmit={save}>
+          <div className="modal-body">
+            <div className="form-row">
+              <Field label="Nombre" value={form.nombre} onChange={(v) => setForm({ ...form, nombre: v })} />
+              <Field label="Apellido" value={form.apellido} onChange={(v) => setForm({ ...form, apellido: v })} />
+            </div>
+            <div className="form-row">
+              <SelectField label="Tipo de documento" value={form.tipo_doc} onChange={(v) => setForm({ ...form, tipo_doc: v })}><option>DNI</option><option>RUC</option><option>CE</option><option>Pasaporte</option></SelectField>
+              <Field label="Documento" value={form.documento} onChange={(v) => setForm({ ...form, documento: v })} />
+            </div>
+            <Field label="Email de contacto" type="email" value={form.email_contacto} onChange={(v) => setForm({ ...form, email_contacto: v })} />
+            <Field label="Teléfono" value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} />
+            <Field label="Dirección" value={form.direccion} onChange={(v) => setForm({ ...form, direccion: v })} />
+            <Field label="Empresa / Negocio" value={form.empresa} onChange={(v) => setForm({ ...form, empresa: v })} />
+            <div className="form-row">
+              <SelectField label="Moneda" value={form.moneda} onChange={(v) => setForm({ ...form, moneda: v })}><option value="PEN">Soles (S/)</option><option value="USD">Dólares ($)</option><option value="EUR">Euros (€)</option></SelectField>
+              <SelectField label="Rol" value={form.role} onChange={(v) => setForm({ ...form, role: v })}><option value="user">Usuario</option><option value="admin">Administrador</option></SelectField>
+            </div>
+          </div>
+          <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />Guardar cambios</button></div>
+        </form>
+      </Modal>
+    </>
+  );
+}
+
 function Perfil({ supabase, user, profile, onSaved }) {
   const [form, setForm] = React.useState({ nombre: '', apellido: '', tipo_doc: 'DNI', documento: '', email_contacto: '', telefono: '', direccion: '', empresa: '', moneda: 'PEN' });
   const [pinForm, setPinForm] = React.useState({ pin: '', confirm: '' });
+  const [passwordForm, setPasswordForm] = React.useState({ password: '', confirm: '' });
   const [status, setStatus] = React.useState('');
   const [pinStatus, setPinStatus] = React.useState('');
+  const [passwordStatus, setPasswordStatus] = React.useState('');
+  const [showProfilePassword, setShowProfilePassword] = React.useState(false);
   React.useEffect(() => setForm({
     nombre: profile?.nombre || '',
     apellido: profile?.apellido || '',
@@ -1959,9 +2294,28 @@ function Perfil({ supabase, user, profile, onSaved }) {
     setPinStatus('PIN actualizado correctamente.');
     onSaved();
   }
+  async function savePassword(event) {
+    event.preventDefault();
+    setPasswordStatus('');
+    if (passwordForm.password.length < 8) {
+      setPasswordStatus('La contraseña debe tener mínimo 8 caracteres.');
+      return;
+    }
+    if (passwordForm.password !== passwordForm.confirm) {
+      setPasswordStatus('La confirmación de contraseña no coincide.');
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: passwordForm.password });
+    if (error) {
+      setPasswordStatus(error.message);
+      return;
+    }
+    setPasswordForm({ password: '', confirm: '' });
+    setPasswordStatus('Contraseña actualizada correctamente.');
+  }
   const setPinField = (field, value) => setPinForm((current) => ({ ...current, [field]: value.replace(/\D/g, '').slice(0, 6) }));
   return <div className="profile-section">
-    <div className="card"><div className="card-header"><h3>Información personal</h3></div><form className="card-body" onSubmit={save}>
+    <div className="card profile-main-card"><div className="card-header"><h3>Información personal</h3></div><form className="card-body" onSubmit={save}>
       <div className="avatar-upload"><div className="avatar-big">{initials(profile, user.email)}</div><div><div className="profile-name">{fullName(profile) || user.email}</div><div className="muted">{user.email}</div><div className="role-text">{profile?.role === 'admin' ? 'Administrador' : 'Usuario'}</div></div></div>
       <div className="form-row"><Field label="Nombre" value={form.nombre} onChange={(v) => setForm({ ...form, nombre: v })} /><Field label="Apellido" value={form.apellido} onChange={(v) => setForm({ ...form, apellido: v })} /></div>
       <div className="form-row">
@@ -1976,15 +2330,32 @@ function Perfil({ supabase, user, profile, onSaved }) {
       {status && <div className={`connection-status ${status.includes('correctamente') ? 'success' : ''}`}>{status}</div>}
       <button className="btn btn-primary"><Check size={16} />Guardar cambios</button>
     </form></div>
-    <div className="card pin-card"><div className="card-header"><h3>PIN móvil</h3></div><form className="card-body" onSubmit={savePin}>
-      <p className="muted">Crea un PIN de 6 dígitos para desbloquear la app en este celular cuando uses “Recordar cuenta”.</p>
-      <div className="form-row">
-        <Field label="Nuevo PIN" type="password" value={pinForm.pin} onChange={(v) => setPinField('pin', v)} inputMode="numeric" pattern="\d{6}" placeholder="------" required minLength={6} />
-        <Field label="Confirmar PIN" type="password" value={pinForm.confirm} onChange={(v) => setPinField('confirm', v)} inputMode="numeric" pattern="\d{6}" placeholder="------" required minLength={6} />
-      </div>
-      {pinStatus && <div className={`connection-status ${pinStatus.includes('correctamente') ? 'success' : ''}`}>{pinStatus}</div>}
-      <button className="btn btn-primary"><Check size={16} />{profile?.pin_hash ? 'Cambiar PIN' : 'Crear PIN'}</button>
-    </form></div>
+    <div className="profile-side">
+      <div className="card pin-card"><div className="card-header"><h3>PIN móvil</h3></div><form className="card-body" onSubmit={savePin}>
+        <p className="muted">Crea un PIN de 6 dígitos para desbloquear la app en este celular cuando uses “Recordar cuenta”.</p>
+        <div className="form-row">
+          <Field label="Nuevo PIN" type="password" value={pinForm.pin} onChange={(v) => setPinField('pin', v)} inputMode="numeric" pattern="\d{6}" placeholder="------" required minLength={6} />
+          <Field label="Confirmar PIN" type="password" value={pinForm.confirm} onChange={(v) => setPinField('confirm', v)} inputMode="numeric" pattern="\d{6}" placeholder="------" required minLength={6} />
+        </div>
+        {pinStatus && <div className={`connection-status ${pinStatus.includes('correctamente') ? 'success' : ''}`}>{pinStatus}</div>}
+        <button className="btn btn-primary"><Check size={16} />{profile?.pin_hash ? 'Cambiar PIN' : 'Crear PIN'}</button>
+      </form></div>
+      <div className="card pin-card"><div className="card-header"><h3>Contraseña</h3></div><form className="card-body" onSubmit={savePassword}>
+        <p className="muted">Cambia la contraseña con la que inicias sesión por correo. El cambio aplica a tu cuenta de Supabase Auth.</p>
+        <Field
+          label="Nueva contraseña"
+          type={showProfilePassword ? 'text' : 'password'}
+          value={passwordForm.password}
+          onChange={(v) => setPasswordForm({ ...passwordForm, password: v })}
+          required
+          minLength={8}
+          rightElement={<button className="input-action" type="button" onClick={() => setShowProfilePassword((value) => !value)}>{showProfilePassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
+        />
+        <Field label="Confirmar contraseña" type={showProfilePassword ? 'text' : 'password'} value={passwordForm.confirm} onChange={(v) => setPasswordForm({ ...passwordForm, confirm: v })} required minLength={8} />
+        {passwordStatus && <div className={`connection-status ${passwordStatus.includes('correctamente') ? 'success' : ''}`}>{passwordStatus}</div>}
+        <button className="btn btn-primary"><Check size={16} />Cambiar contraseña</button>
+      </form></div>
+    </div>
   </div>;
 }
 

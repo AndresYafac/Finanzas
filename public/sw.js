@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fintrack-pro-v1';
+const CACHE_NAME = 'fintrack-pro-v4';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/fintrack-icon.svg'];
 
 self.addEventListener('install', (event) => {

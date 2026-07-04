@@ -7,6 +7,7 @@ export async function signInWithPassword({ supabase, email, password, remember }
   if (remember) {
     localStorage.setItem(REMEMBER_KEY, '1');
     localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
+    localStorage.removeItem(LOCKED_KEY);
   } else {
     clearRememberedAccount();
   }

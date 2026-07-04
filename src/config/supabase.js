@@ -1,7 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
+import { hideBusy, showBusy } from '../services/feedback';
 
 export function createSupabaseClient(url, key) {
-  return createClient(url, key);
+  return createClient(url, key, {
+    global: {
+      fetch: async (...args) => {
+        showBusy('Procesando...');
+        try {
+          return await fetch(...args);
+        } finally {
+          hideBusy();
+        }
+      },
+    },
+  });
 }
 
 export function createStoredClient() {
