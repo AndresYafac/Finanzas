@@ -15,9 +15,10 @@ import {
   FileDown,
   LayoutDashboard,
   LogOut,
-  Menu,
   Pencil,
   Plus,
+  RefreshCw,
+  Search,
   ShieldCheck,
   Settings,
   ArrowRightLeft,
@@ -39,6 +40,7 @@ import { hashPin, isMobileViewport } from './utils/security';
 import './styles.css';
 
 const LAST_PAGE_KEY = 'fintrack_last_page';
+const COMPANY_CONFIG_KEY = 'fintrack_company_config';
 const PAGE_IDS = [
   'dashboard',
   'clientes',
@@ -60,6 +62,46 @@ const PAGE_IDS = [
   'config',
 ];
 
+const DEFAULT_COMPANY_CONFIG = {
+  nombre: 'FinTrack Pro',
+  documento: '',
+  direccion: '',
+  telefono: '',
+  logo_url: '',
+};
+const MODULE_PERMISSIONS = [
+  ['dashboard', 'Dashboard'],
+  ['clientes', 'Clientes'],
+  ['cuentas', 'Cuentas bancarias'],
+  ['deudas', 'Pendientes por cobrar'],
+  ['prestamos', 'Préstamos otorgados'],
+  ['cobros-prestamos', 'Cobros de préstamos'],
+  ['prestamos-recibidos', 'Préstamos recibidos'],
+  ['pagos-prestamos-recibidos', 'Pagos de préstamos recibidos'],
+  ['pagos', 'Cobros generales'],
+  ['movimientos', 'Ingresos / Egresos'],
+  ['presupuestos', 'Presupuestos'],
+  ['metas', 'Metas'],
+  ['reportes', 'Reportes'],
+  ['backup', 'Backup'],
+  ['auditoria', 'Auditoría'],
+];
+const PERMISSION_FIELDS = [
+  ['can_view', 'Ver'],
+  ['can_create', 'Crear'],
+  ['can_edit', 'Editar'],
+  ['can_delete', 'Eliminar'],
+  ['can_export', 'Exportar'],
+];
+
+function getCompanyConfig() {
+  try {
+    return { ...DEFAULT_COMPANY_CONFIG, ...(JSON.parse(localStorage.getItem(COMPANY_CONFIG_KEY) || '{}') || {}) };
+  } catch {
+    return DEFAULT_COMPANY_CONFIG;
+  }
+}
+
 function App() {
   const [supabase, setSupabase] = React.useState(createStoredClient);
   const [session, setSession] = React.useState(null);
@@ -76,6 +118,9 @@ function App() {
   const [installPrompt, setInstallPrompt] = React.useState(null);
   const [locked, setLocked] = React.useState(() => localStorage.getItem(LOCKED_KEY) === '1');
   const [sidebarHidden, setSidebarHidden] = React.useState(() => localStorage.getItem('fintrack_sidebar_hidden') === '1');
+  const [updateWaiting, setUpdateWaiting] = React.useState(null);
+  const [alertsOpen, setAlertsOpen] = React.useState(false);
+  const [permissions, setPermissions] = React.useState({});
 
   React.useEffect(() => {
     setFeedbackHandlers({
@@ -97,6 +142,22 @@ function App() {
     };
     window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
     return () => window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+  }, []);
+
+  React.useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.getRegistration().then((registration) => {
+      if (!registration) return;
+      if (registration.waiting) setUpdateWaiting(registration.waiting);
+      registration.addEventListener('updatefound', () => {
+        const worker = registration.installing;
+        worker?.addEventListener('statechange', () => {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+            setUpdateWaiting(worker);
+          }
+        });
+      });
+    });
   }, []);
 
   React.useEffect(() => {
@@ -146,6 +207,23 @@ function App() {
     localStorage.setItem(LAST_PAGE_KEY, page);
   }, [page, profile]);
 
+  React.useEffect(() => {
+    async function loadPermissions() {
+      if (!supabase || !session?.user || !profile) return;
+      if (profile.role === 'admin') {
+        setPermissions({});
+        return;
+      }
+      const { data, error } = await supabase.from('user_permissions').select('*').eq('user_id', session.user.id);
+      if (error) {
+        setPermissions({});
+        return;
+      }
+      setPermissions((data || []).reduce((map, row) => ({ ...map, [row.modulo]: row }), {}));
+    }
+    loadPermissions();
+  }, [supabase, session?.user, profile]);
+
   if (!supabase) return <><Setup onReady={setSupabase} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (!session) return <><Auth supabase={supabase} message={message} setMessage={setMessage} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (locked && !profile) return <><AuthCard title="Desbloquear FinTrack"><p className="muted">Cargando cuenta recordada...</p></AuthCard><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
@@ -163,27 +241,34 @@ function App() {
   }
 
   const isAdmin = profile?.role === 'admin';
+  const can = (moduleId, action = 'view') => {
+    if (isAdmin) return true;
+    const row = permissions[moduleId];
+    if (!row) return true;
+    const map = { view: 'can_view', create: 'can_create', edit: 'can_edit', delete: 'can_delete', export: 'can_export' };
+    return row[map[action]] !== false;
+  };
   const pages = [
     ['principal', [
-      ['dashboard', 'Dashboard', LayoutDashboard, true],
-      ['clientes', 'Clientes', Users, true],
+      ['dashboard', 'Dashboard', LayoutDashboard, can('dashboard')],
+      ['clientes', 'Clientes', Users, can('clientes')],
     ]],
     ['finanzas', [
-      ['cuentas', 'Cuentas bancarias', Building2, true],
-      ['deudas', 'Pendientes por cobrar', CreditCard, true],
-      ['prestamos', 'Préstamos otorgados', TrendingDown, true],
-      ['cobros-prestamos', 'Cobros de préstamos', TrendingUp, true],
-      ['prestamos-recibidos', 'Préstamos recibidos', Banknote, true],
-      ['pagos-prestamos-recibidos', 'Pagos de préstamos', TrendingDown, true],
-      ['pagos', 'Cobros generales', Banknote, true],
-      ['movimientos', 'Ingresos / Egresos', Wallet, true],
-      ['presupuestos', 'Presupuestos', ClipboardList, true],
-      ['metas', 'Metas', Target, true],
+      ['cuentas', 'Cuentas bancarias', Building2, can('cuentas')],
+      ['deudas', 'Pendientes por cobrar', CreditCard, can('deudas')],
+      ['prestamos', 'Préstamos otorgados', TrendingDown, can('prestamos')],
+      ['cobros-prestamos', 'Cobros de préstamos', TrendingUp, can('cobros-prestamos')],
+      ['prestamos-recibidos', 'Préstamos recibidos', Banknote, can('prestamos-recibidos')],
+      ['pagos-prestamos-recibidos', 'Pagos de préstamos', TrendingDown, can('pagos-prestamos-recibidos')],
+      ['pagos', 'Cobros generales', Banknote, can('pagos')],
+      ['movimientos', 'Ingresos / Egresos', Wallet, can('movimientos')],
+      ['presupuestos', 'Presupuestos', ClipboardList, can('presupuestos')],
+      ['metas', 'Metas', Target, can('metas')],
     ]],
     ['análisis', [
-      ['reportes', 'Reportes', BarChart3, true],
-      ['backup', 'Backup', Database, true],
-      ['auditoria', 'Auditoría', ShieldCheck, true],
+      ['reportes', 'Reportes', BarChart3, can('reportes')],
+      ['backup', 'Backup', Database, can('backup')],
+      ['auditoria', 'Auditoría', ShieldCheck, can('auditoria')],
     ]],
     ['sistema', [
       ['perfil', 'Mi perfil', UserCircle, true],
@@ -207,6 +292,7 @@ function App() {
 
   function openPage(nextPage) {
     if ((nextPage === 'config' || nextPage === 'usuarios-admin') && !isAdmin) return;
+    if (!can(nextPage, 'view')) return notify('No tienes permiso para ver este módulo.');
     setPage(nextPage);
   }
 
@@ -216,6 +302,12 @@ function App() {
       localStorage.setItem('fintrack_sidebar_hidden', next ? '1' : '0');
       return next;
     });
+  }
+
+  function applyUpdate() {
+    if (!updateWaiting) return;
+    updateWaiting.postMessage({ type: 'SKIP_WAITING' });
+    window.location.reload();
   }
 
   return (
@@ -256,13 +348,18 @@ function App() {
       <main className="main">
         <div className="topbar">
           <div className="topbar-left">
-            <button className="btn btn-icon sidebar-toggle" type="button" onClick={toggleSidebar} title={sidebarHidden ? 'Mostrar menú' : 'Ocultar menú'}><Menu size={18} /></button>
+            <button className="btn btn-icon sidebar-toggle" type="button" onClick={toggleSidebar} title={sidebarHidden ? 'Mostrar menú' : 'Ocultar menú'}>
+              <SidebarPanelIcon collapsed={sidebarHidden} size={30} />
+            </button>
             <div>
               <h2>{pageTitle(page, isAdmin)[0]}</h2>
               <p>{pageTitle(page, isAdmin)[1]}</p>
             </div>
           </div>
           <div className="topbar-actions">
+            <GlobalSearch supabase={supabase} user={session.user} onOpenPage={openPage} />
+            <AlertsButton supabase={supabase} user={session.user} open={alertsOpen} setOpen={setAlertsOpen} onOpenPage={openPage} />
+            {updateWaiting && <button className="btn" type="button" onClick={applyUpdate}><RefreshCw size={16} />Actualizar app</button>}
             {installPrompt && <button className="btn btn-primary" onClick={async () => {
               await installPrompt.prompt();
               setInstallPrompt(null);
@@ -275,20 +372,20 @@ function App() {
         {message && <div className="alert alert-danger">{message}</div>}
         <div className={`page active page-${page}`}>
           {page === 'dashboard' && <Dashboard supabase={supabase} user={session.user} isAdmin={isAdmin} />}
-          {page === 'clientes' && <Clientes supabase={supabase} user={session.user} />}
-          {page === 'cuentas' && <Cuentas supabase={supabase} user={session.user} />}
-          {page === 'deudas' && <Deudas supabase={supabase} user={session.user} isAdmin={isAdmin} />}
-          {page === 'prestamos' && <Prestamos supabase={supabase} user={session.user} />}
-          {page === 'cobros-prestamos' && <CobrosPrestamos supabase={supabase} user={session.user} />}
-          {page === 'prestamos-recibidos' && <PrestamosRecibidos supabase={supabase} user={session.user} />}
-          {page === 'pagos-prestamos-recibidos' && <PagosPrestamosRecibidos supabase={supabase} user={session.user} />}
-          {page === 'pagos' && <Pagos supabase={supabase} user={session.user} isAdmin={isAdmin} />}
-          {page === 'movimientos' && <Movimientos supabase={supabase} user={session.user} isAdmin={isAdmin} />}
-          {page === 'presupuestos' && <Presupuestos supabase={supabase} user={session.user} />}
-          {page === 'metas' && <Metas supabase={supabase} user={session.user} />}
-          {page === 'reportes' && <Reportes supabase={supabase} user={session.user} />}
-          {page === 'backup' && <Backup supabase={supabase} user={session.user} />}
-          {page === 'auditoria' && <Auditoria supabase={supabase} user={session.user} />}
+          {page === 'clientes' && <Clientes supabase={supabase} user={session.user} can={(action) => can('clientes', action)} />}
+          {page === 'cuentas' && <Cuentas supabase={supabase} user={session.user} can={(action) => can('cuentas', action)} />}
+          {page === 'deudas' && <Deudas supabase={supabase} user={session.user} isAdmin={isAdmin} can={(action) => can('deudas', action)} />}
+          {page === 'prestamos' && <Prestamos supabase={supabase} user={session.user} can={(action) => can('prestamos', action)} />}
+          {page === 'cobros-prestamos' && <CobrosPrestamos supabase={supabase} user={session.user} can={(action) => can('cobros-prestamos', action)} />}
+          {page === 'prestamos-recibidos' && <PrestamosRecibidos supabase={supabase} user={session.user} can={(action) => can('prestamos-recibidos', action)} />}
+          {page === 'pagos-prestamos-recibidos' && <PagosPrestamosRecibidos supabase={supabase} user={session.user} can={(action) => can('pagos-prestamos-recibidos', action)} />}
+          {page === 'pagos' && <Pagos supabase={supabase} user={session.user} isAdmin={isAdmin} can={(action) => can('pagos', action)} />}
+          {page === 'movimientos' && <Movimientos supabase={supabase} user={session.user} isAdmin={isAdmin} can={(action) => can('movimientos', action)} />}
+          {page === 'presupuestos' && <Presupuestos supabase={supabase} user={session.user} can={(action) => can('presupuestos', action)} />}
+          {page === 'metas' && <Metas supabase={supabase} user={session.user} can={(action) => can('metas', action)} />}
+          {page === 'reportes' && <Reportes supabase={supabase} user={session.user} can={(action) => can('reportes', action)} />}
+          {page === 'backup' && <Backup supabase={supabase} user={session.user} can={(action) => can('backup', action)} />}
+          {page === 'auditoria' && <Auditoria supabase={supabase} user={session.user} can={(action) => can('auditoria', action)} />}
           {page === 'perfil' && <Perfil supabase={supabase} user={session.user} profile={profile} onSaved={() => setRefreshKey((x) => x + 1)} />}
           {page === 'usuarios-admin' && isAdmin && <UsuariosAdmin supabase={supabase} user={session.user} />}
           {page === 'config' && isAdmin && <Config onReady={setSupabase} />}
@@ -322,8 +419,51 @@ function toCsv(rows) {
   const escape = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
   return [columns.join(','), ...rows.map((row) => columns.map((column) => escape(row[column])).join(','))].join('\n');
 }
+function parseCsv(text) {
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
+  if (!lines.length) return [];
+  const parseLine = (line) => {
+    const values = [];
+    let current = '';
+    let quoted = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const char = line[i];
+      if (char === '"' && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else if (char === '"') {
+        quoted = !quoted;
+      } else if (char === ',' && !quoted) {
+        values.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    values.push(current);
+    return values.map((value) => value.trim());
+  };
+  const headers = parseLine(lines[0]).map((header) => header.trim().toLowerCase());
+  return lines.slice(1).map((line) => {
+    const values = parseLine(line);
+    return headers.reduce((row, header, index) => ({ ...row, [header]: values[index] || '' }), {});
+  });
+}
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+}
 async function logAudit(supabase, userId, tabla, accion, descripcion, registro_id = null, datos = null) {
-  await supabase.from('auditoria').insert({ admin_id: userId, tabla, accion, descripcion, registro_id, datos });
+  const { error } = await supabase.rpc('registrar_auditoria_avanzada', {
+    p_tabla: tabla,
+    p_accion: accion,
+    p_descripcion: descripcion,
+    p_registro_id: registro_id,
+    p_datos_antes: accion === 'delete' ? datos : null,
+    p_datos_despues: accion === 'delete' ? null : datos,
+  });
+  if (error) {
+    await supabase.from('auditoria').insert({ admin_id: userId, tabla, accion, descripcion, registro_id, datos });
+  }
 }
 function pageTitle(page, isAdmin) {
   const labels = {
@@ -373,6 +513,148 @@ function AppLogoIcon({ size = 22 }) {
       <path d="M20 36h12" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
       <circle cx="45" cy="41" r="2.8" fill="currentColor" />
     </svg>
+  );
+}
+
+function SidebarPanelIcon({ collapsed = false, size = 30 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="2.5" y="4.25" width="19" height="15.5" rx="4" stroke="currentColor" strokeWidth="2.35" />
+      <path d="M8.25 5.1v13.8" stroke="currentColor" strokeWidth="2.35" strokeLinecap="round" />
+      <path
+        d={collapsed ? 'M12.4 8.2 16.4 12l-4 3.8' : 'M16 8.2 12 12l4 3.8'}
+        stroke="currentColor"
+        strokeWidth="2.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SolidBellIcon({ size = 28 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 2.75A6.75 6.75 0 0 0 5.25 9.5v3.35c0 1.35-.48 2.66-1.36 3.69A2.65 2.65 0 0 0 5.9 20.9h12.2a2.65 2.65 0 0 0 2.01-4.36 5.67 5.67 0 0 1-1.36-3.69V9.5A6.75 6.75 0 0 0 12 2.75Z"
+      />
+      <path fill="currentColor" d="M9.2 21.55a3.05 3.05 0 0 0 5.6 0H9.2Z" />
+    </svg>
+  );
+}
+
+function GlobalSearch({ supabase, user, onOpenPage }) {
+  const [query, setQuery] = React.useState('');
+  const [results, setResults] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function search() {
+      const term = query.trim().replace(/[,%()]/g, ' ');
+      if (term.length < 2) {
+        setResults([]);
+        return;
+      }
+      const like = `%${term}%`;
+      const [clientes, cuentas, deudas, pagos, movimientos] = await Promise.all([
+        supabase.from('clientes').select('id,nombre,apellido,email,telefono').eq('admin_id', user.id).or(`nombre.ilike.${like},apellido.ilike.${like},email.ilike.${like},telefono.ilike.${like}`).limit(5),
+        supabase.from('cuentas').select('id,banco,tipo,moneda').eq('admin_id', user.id).or(`banco.ilike.${like},tipo.ilike.${like}`).limit(5),
+        supabase.from('deudas').select('id,descripcion,tipo,clientes(nombre,apellido)').eq('admin_id', user.id).or(`descripcion.ilike.${like},tipo.ilike.${like}`).limit(5),
+        supabase.from('pagos').select('id,referencia,metodo,clientes(nombre,apellido)').eq('admin_id', user.id).or(`referencia.ilike.${like},metodo.ilike.${like},notas.ilike.${like}`).limit(5),
+        supabase.from('movimientos').select('id,descripcion,categoria,tipo').eq('admin_id', user.id).or(`descripcion.ilike.${like},categoria.ilike.${like},tipo.ilike.${like}`).limit(5),
+      ]);
+      if (cancelled) return;
+      setResults([
+        ...(clientes.data || []).map((r) => ({ page: 'clientes', title: `${r.nombre || ''} ${r.apellido || ''}`.trim() || 'Cliente', meta: r.email || r.telefono || 'Cliente', type: 'Cliente' })),
+        ...(cuentas.data || []).map((r) => ({ page: 'cuentas', title: r.banco || 'Cuenta', meta: `${r.tipo || '-'} · ${r.moneda || 'PEN'}`, type: 'Cuenta' })),
+        ...(deudas.data || []).map((r) => ({ page: r.tipo === 'Préstamo' ? 'prestamos' : 'deudas', title: r.descripcion || r.tipo || 'Pendiente', meta: `${r.clientes?.nombre || ''} ${r.clientes?.apellido || ''}`.trim(), type: r.tipo === 'Préstamo' ? 'Préstamo' : 'Pendiente' })),
+        ...(pagos.data || []).map((r) => ({ page: 'pagos', title: r.referencia || r.metodo || 'Cobro', meta: `${r.clientes?.nombre || ''} ${r.clientes?.apellido || ''}`.trim(), type: 'Cobro' })),
+        ...(movimientos.data || []).map((r) => ({ page: 'movimientos', title: r.descripcion || r.categoria || 'Movimiento', meta: r.tipo, type: 'Movimiento' })),
+      ].slice(0, 8));
+    }
+    const timer = window.setTimeout(search, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query, supabase, user.id]);
+  function selectResult(result) {
+    onOpenPage(result.page);
+    setQuery('');
+    setResults([]);
+    setOpen(false);
+  }
+  return (
+    <div className="global-search">
+      <Search size={16} />
+      <input value={query} onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }} placeholder="Buscar..." />
+      {open && query.trim().length >= 2 && (
+        <div className="global-search-results">
+          {results.length ? results.map((result, index) => (
+            <button key={`${result.page}-${index}`} type="button" onClick={() => selectResult(result)}>
+              <span><b>{result.title}</b><small>{result.meta || result.type}</small></span>
+              <em>{result.type}</em>
+            </button>
+          )) : <div className="global-search-empty">Sin resultados</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
+  const [alerts, setAlerts] = React.useState([]);
+  React.useEffect(() => {
+    async function load() {
+      const [deudas, presupuestos, movimientos, metas] = await Promise.all([
+        supabase.from('deudas').select('id,descripcion,fecha_vencimiento,monto_total,monto_pagado,tipo,clientes(nombre,apellido)').eq('admin_id', user.id),
+        supabase.from('presupuestos').select('id,categoria,tipo,monto_limite,tipo_movimiento_id,tipos_movimiento(nombre)').eq('admin_id', user.id).eq('mes', month()),
+        supabase.from('movimientos').select('id,tipo,categoria,tipo_movimiento_id,monto,fecha').eq('admin_id', user.id).gte('fecha', `${month()}-01`).lte('fecha', today()),
+        supabase.from('metas').select('id,nombre,monto_objetivo,monto_actual,fecha_objetivo,estado').eq('admin_id', user.id).eq('estado', 'activa'),
+      ]);
+      const debtAlerts = (deudas.data || [])
+        .filter((d) => calcEstado(d) === 'vencido' || calcEstado(d) === 'por_vencer')
+        .slice(0, 5)
+        .map((d) => ({ page: d.tipo === 'Préstamo' ? 'prestamos' : 'deudas', level: calcEstado(d) === 'vencido' ? 'danger' : 'warning', title: calcEstado(d) === 'vencido' ? 'Pendiente vencido' : 'Pendiente por vencer', text: `${d.descripcion || 'Sin descripción'} · ${money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}` }));
+      const budgetAlerts = (presupuestos.data || []).map((p) => {
+        const used = (movimientos.data || [])
+          .filter((m) => m.tipo === p.tipo && ((p.tipo_movimiento_id && m.tipo_movimiento_id === p.tipo_movimiento_id) || (!p.tipo_movimiento_id && (m.categoria || '') === (p.categoria || ''))))
+          .reduce((sum, m) => sum + Number(m.monto || 0), 0);
+        const limit = Number(p.monto_limite || 0);
+        return { p, used, limit, pct: limit ? Math.round((used / limit) * 100) : 0 };
+      }).filter((item) => item.limit && item.pct >= 80).slice(0, 4).map((item) => ({
+        page: 'presupuestos',
+        level: item.pct >= 100 ? 'danger' : 'warning',
+        title: item.pct >= 100 ? 'Presupuesto superado' : 'Presupuesto en alerta',
+        text: `${item.p.tipos_movimiento?.nombre || item.p.categoria || item.p.tipo}: ${item.pct}%`,
+      }));
+      const goalAlerts = (metas.data || [])
+        .filter((m) => m.fecha_objetivo && m.fecha_objetivo <= today())
+        .slice(0, 3)
+        .map((m) => ({ page: 'metas', level: 'warning', title: 'Meta por revisar', text: `${m.nombre}: ${money(m.monto_actual)} / ${money(m.monto_objetivo)}` }));
+      setAlerts([...debtAlerts, ...budgetAlerts, ...goalAlerts]);
+    }
+    load();
+  }, [supabase, user.id]);
+  return (
+    <div className="alerts-menu">
+      <button className="btn btn-icon alerts-button" type="button" onClick={() => setOpen(!open)} title="Alertas">
+        <SolidBellIcon size={28} />
+        {!!alerts.length && <span className="alerts-count">{alerts.length}</span>}
+      </button>
+      {open && (
+        <div className="alerts-panel">
+          <h4>Alertas</h4>
+          {alerts.length ? alerts.map((alert, index) => (
+            <button key={`${alert.title}-${index}`} type="button" onClick={() => { onOpenPage(alert.page); setOpen(false); }}>
+              <b className={alert.level === 'danger' ? 'danger-text' : ''}>{alert.title}</b>
+              <small>{alert.text}</small>
+            </button>
+          )) : <div className="global-search-empty">Sin alertas por ahora</div>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -462,20 +744,37 @@ function Auth({ supabase, message, setMessage }) {
 function PinUnlock({ profile, onUnlock, onFullLogout }) {
   const [pin, setPin] = React.useState('');
   const [error, setError] = React.useState('');
+  const [attempts, setAttempts] = React.useState(0);
+  const [lockedUntil, setLockedUntil] = React.useState(() => Number(localStorage.getItem('fintrack_pin_locked_until') || 0));
 
   async function submit(event) {
     event.preventDefault();
     setError('');
+    if (lockedUntil && Date.now() < lockedUntil) {
+      setError(`PIN bloqueado temporalmente. Intenta nuevamente en ${Math.ceil((lockedUntil - Date.now()) / 60000)} min.`);
+      return;
+    }
     if (!/^\d{6}$/.test(pin)) {
       setError('Ingresa tu PIN de 6 dígitos.');
       return;
     }
     const nextHash = await hashPin(pin, profile.pin_salt);
     if (nextHash !== profile.pin_hash) {
-      setError('PIN incorrecto.');
+      const nextAttempts = attempts + 1;
+      setAttempts(nextAttempts);
+      if (nextAttempts >= 5) {
+        const until = Date.now() + 5 * 60 * 1000;
+        localStorage.setItem('fintrack_pin_locked_until', String(until));
+        setLockedUntil(until);
+        setAttempts(0);
+        setError('Demasiados intentos fallidos. PIN bloqueado por 5 minutos.');
+      } else {
+        setError(`PIN incorrecto. Intentos restantes: ${5 - nextAttempts}.`);
+      }
       setPin('');
       return;
     }
+    localStorage.removeItem('fintrack_pin_locked_until');
     onUnlock();
   }
 
@@ -511,8 +810,29 @@ function PinUnlock({ profile, onUnlock, onFullLogout }) {
 function Config({ onReady, compact = false }) {
   const [url, setUrl] = React.useState(localStorage.getItem('sb_url') || import.meta.env.VITE_SUPABASE_URL || '');
   const [key, setKey] = React.useState(localStorage.getItem('sb_key') || import.meta.env.VITE_SUPABASE_ANON_KEY || '');
+  const [company, setCompany] = React.useState(getCompanyConfig);
+  const logoInputRef = React.useRef(null);
   const [status, setStatus] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (compact) return;
+    const client = createStoredClient();
+    if (!client) return;
+    client.from('empresa_config').select('*').maybeSingle().then(({ data }) => {
+      if (data) {
+        const next = {
+          nombre: data.nombre || DEFAULT_COMPANY_CONFIG.nombre,
+          documento: data.documento || '',
+          direccion: data.direccion || '',
+          telefono: data.telefono || '',
+          logo_url: data.logo_url || '',
+        };
+        setCompany(next);
+        localStorage.setItem(COMPANY_CONFIG_KEY, JSON.stringify(next));
+      }
+    });
+  }, [compact]);
 
   async function save(event) {
     event.preventDefault();
@@ -537,6 +857,42 @@ function Config({ onReady, compact = false }) {
     setLoading(false);
   }
 
+  async function saveCompany(event) {
+    event.preventDefault();
+    localStorage.setItem(COMPANY_CONFIG_KEY, JSON.stringify(company));
+    const client = createStoredClient();
+    if (client) {
+      const { data: sessionData } = await client.auth.getSession();
+      const adminId = sessionData.session?.user?.id;
+      if (adminId) {
+        await client.from('empresa_config').upsert({ admin_id: adminId, ...company, updated_at: new Date().toISOString() }, { onConflict: 'admin_id' });
+      }
+    }
+    setStatus('Datos de empresa guardados correctamente.');
+  }
+  async function uploadLogo(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const client = createStoredClient();
+    if (!client) {
+      setStatus('Configura Supabase antes de subir el logo.');
+      return;
+    }
+    const { data: sessionData } = await client.auth.getSession();
+    const adminId = sessionData.session?.user?.id;
+    if (!adminId) return setStatus('Inicia sesión para subir el logo.');
+    const ext = file.name.split('.').pop() || 'png';
+    const path = `${adminId}/logo-${Date.now()}.${ext}`;
+    const { error } = await client.storage.from('empresa-assets').upload(path, file, { upsert: true });
+    if (error) {
+      setStatus(error.message);
+      return;
+    }
+    const { data } = client.storage.from('empresa-assets').getPublicUrl(path);
+    setCompany((current) => ({ ...current, logo_url: data.publicUrl }));
+    setStatus('Logo subido. Guarda los datos de empresa para conservarlo.');
+  }
+
   return (
     <div className={compact ? '' : 'profile-section'}>
       <div className={compact ? '' : 'card'}>
@@ -549,6 +905,19 @@ function Config({ onReady, compact = false }) {
             <button className="btn btn-primary" disabled={loading}>{loading ? 'Guardando...' : 'Guardar conexión'}</button>
             {status && <div className="connection-status success">{status}</div>}
           </form>
+          {!compact && (
+            <form className="config-company-form" onSubmit={saveCompany}>
+              <h4>Datos de empresa para reportes</h4>
+              <Field label="Nombre comercial" value={company.nombre} onChange={(v) => setCompany({ ...company, nombre: v })} />
+              <Field label="RUC / Documento" value={company.documento} onChange={(v) => setCompany({ ...company, documento: v })} />
+              <Field label="Dirección" value={company.direccion} onChange={(v) => setCompany({ ...company, direccion: v })} />
+              <Field label="Teléfono" value={company.telefono} onChange={(v) => setCompany({ ...company, telefono: v })} />
+              <Field label="URL del logo" value={company.logo_url} onChange={(v) => setCompany({ ...company, logo_url: v })} placeholder="https://..." />
+              <input ref={logoInputRef} type="file" accept="image/*" hidden onChange={uploadLogo} />
+              <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Subir logo</button>
+              <button className="btn btn-primary"><Check size={16} />Guardar datos de empresa</button>
+            </form>
+          )}
         </div>
       </div>
     </div>
@@ -721,7 +1090,7 @@ function ListCard({ title, items, empty }) {
   return <div className="card"><div className="card-header"><h3>{title}</h3></div><div className="card-body">{items.length ? items.map((x) => <div className="list-row" key={x}>{x}</div>) : <div className="empty-state"><p>{empty}</p></div>}</div></div>;
 }
 
-function Clientes({ supabase, user }) {
+function Clientes({ supabase, user, can = () => true }) {
   const [clientes, setClientes] = React.useState([]);
   const [query, setQuery] = React.useState('');
   const [open, setOpen] = React.useState(false);
@@ -750,6 +1119,7 @@ function Clientes({ supabase, user }) {
     setOpen(true);
   }
   async function remove(cliente) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction(`Eliminar cliente ${cliente.nombre || ''} ${cliente.apellido || ''}?`))) return;
     const { error } = await supabase.from('clientes').delete().eq('id', cliente.id).eq('admin_id', user.id);
     if (error) {
@@ -761,6 +1131,8 @@ function Clientes({ supabase, user }) {
   async function save(event) {
     event.preventDefault();
     if (!form.nombre) return;
+    if (editingId && !can('edit')) return notify('No tienes permiso para editar.');
+    if (!editingId && !can('create')) return notify('No tienes permiso para crear.');
     const { error } = editingId
       ? await supabase.from('clientes').update(form).eq('id', editingId).eq('admin_id', user.id)
       : await supabase.from('clientes').insert({ ...form, admin_id: user.id });
@@ -780,9 +1152,9 @@ function Clientes({ supabase, user }) {
         title="Clientes"
         search={query}
         setSearch={setQuery}
-        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo cliente</button>}
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo cliente</button>}
         columns={['Cliente', 'Documento', 'Teléfono', 'Email', 'Dirección']}
-        rows={filtered.map((c) => [`${c.nombre || '-'} ${c.apellido || ''}`, `${c.tipo_doc || 'DNI'} ${c.documento || '-'}`, c.telefono || '-', c.email || '-', c.direccion || '-', <RowActions onEdit={() => openEdit(c)} onDelete={() => remove(c)} />])}
+        rows={filtered.map((c) => [`${c.nombre || '-'} ${c.apellido || ''}`, `${c.tipo_doc || 'DNI'} ${c.documento || '-'}`, c.telefono || '-', c.email || '-', c.direccion || '-', <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(c)} onDelete={() => remove(c)} />])}
       />
       <Modal open={open} title={editingId ? 'Editar cliente' : 'Nuevo cliente'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
@@ -807,7 +1179,7 @@ function Clientes({ supabase, user }) {
   );
 }
 
-function Cuentas({ supabase, user }) {
+function Cuentas({ supabase, user, can = () => true }) {
   const [cuentas, setCuentas] = React.useState([]);
   const [open, setOpen] = React.useState(false);
   const [transferOpen, setTransferOpen] = React.useState(false);
@@ -855,6 +1227,7 @@ function Cuentas({ supabase, user }) {
     setOpen(true);
   }
   async function remove(cuenta) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction(`Eliminar cuenta ${cuenta.banco || ''}?`))) return;
     const { error } = await supabase.from('cuentas').delete().eq('id', cuenta.id).eq('admin_id', user.id);
     if (error) {
@@ -865,6 +1238,8 @@ function Cuentas({ supabase, user }) {
   }
   async function save(event) {
     event.preventDefault();
+    if (editingId && !can('edit')) return notify('No tienes permiso para editar.');
+    if (!editingId && !can('create')) return notify('No tienes permiso para crear.');
     const payload = { ...form, saldo: Number(form.saldo || 0) };
     const { error } = editingId
       ? await supabase.from('cuentas').update(payload).eq('id', editingId).eq('admin_id', user.id)
@@ -880,6 +1255,7 @@ function Cuentas({ supabase, user }) {
   }
   async function saveTransfer(event) {
     event.preventDefault();
+    if (!can('create')) return notify('No tienes permiso para crear transferencias.');
     const payload = {
       p_cuenta_origen_id: transferForm.cuenta_origen_id,
       p_cuenta_destino_id: transferForm.tipo_destino === 'propia' ? transferForm.cuenta_destino_id : null,
@@ -908,8 +1284,8 @@ function Cuentas({ supabase, user }) {
   };
   return (
     <>
-      <div className="action-bar"><div></div><div className="table-actions"><button className="btn" onClick={() => setTransferOpen(true)}><ArrowRightLeft size={16} />Nueva transferencia</button><button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva cuenta</button></div></div>
-      <div className="grid-3">{cuentas.map((c) => <div className="account-card account-card-hover" key={c.id}><div className="account-card-actions"><RowActions onEdit={() => openEdit(c)} onDelete={() => remove(c)} /></div><Building2 /><strong>{c.banco}</strong><span>{c.tipo} - {c.moneda}</span><b>{money(c.saldo)}</b></div>)}</div>
+      <div className="action-bar"><div></div><div className="table-actions">{can('create') && <button className="btn" onClick={() => setTransferOpen(true)}><ArrowRightLeft size={16} />Nueva transferencia</button>}{can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva cuenta</button>}</div></div>
+      <div className="grid-3">{cuentas.map((c) => <div className="account-card account-card-hover" key={c.id}><div className="account-card-actions"><RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(c)} onDelete={() => remove(c)} /></div><Building2 /><strong>{c.banco}</strong><span>{c.tipo} - {c.moneda}</span><b>{money(c.saldo)}</b></div>)}</div>
       <div className="card transfer-card"><div className="card-header"><h3>Ultimas transferencias</h3></div><div className="card-body">{transferencias.length ? transferencias.map((t) => <div className="list-row transfer-row" key={t.id}><span>{dateFmt(t.fecha)} - {cuentaNombre(t.cuenta_origen_id)} a {t.tipo_destino === 'propia' ? cuentaNombre(t.cuenta_destino_id) : `${t.banco_destino || 'Cuenta externa'} ${t.numero_destino || ''}`}</span><strong>{money(t.monto)}</strong></div>) : <div className="empty-state"><p>Sin transferencias registradas</p></div>}</div></div>
       <div className="report-spacer" />
       <TableSection title="Historial por cuenta" columns={['Fecha', 'Cuenta', 'Tipo', 'Detalle', 'Monto']} rows={historial.map((h) => [dateFmt(h.fecha), cuentaNombre(h.cuenta_id), badge(h.tipo), h.detalle || '-', money(h.monto)])} />
@@ -970,7 +1346,7 @@ function TransferenciaModal({ open, onClose, onSubmit, form, setForm, cuentas })
   );
 }
 
-function Deudas({ supabase, user, isAdmin }) {
+function Deudas({ supabase, user, isAdmin, can = () => true }) {
   const [deudas, setDeudas] = React.useState([]);
   const [clientes, setClientes] = React.useState([]);
   const [open, setOpen] = React.useState(false);
@@ -1005,6 +1381,7 @@ function Deudas({ supabase, user, isAdmin }) {
     setOpen(true);
   }
   async function remove(deuda) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction(`Eliminar deuda ${deuda.descripcion || ''}?`))) return;
     const { error } = await supabase.from('deudas').delete().eq('id', deuda.id).eq('admin_id', user.id);
     if (error) {
@@ -1043,9 +1420,9 @@ function Deudas({ supabase, user, isAdmin }) {
     <>
       <TableSection
         title="Pendientes por cobrar"
-        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva deuda</button>}
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva deuda</button>}
         columns={['Cliente', 'Descripción', 'Tipo', 'Total', 'Pendiente', 'Vencimiento', 'Estado']}
-        rows={deudas.map((d) => [`${d.clientes?.nombre || ''} ${d.clientes?.apellido || ''}`, d.descripcion, d.tipo, money(d.monto_total), money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0)), dateFmt(d.fecha_vencimiento), badge(d.estado), <RowActions onEdit={() => openEdit(d)} onDelete={() => remove(d)} />])}
+        rows={deudas.map((d) => [`${d.clientes?.nombre || ''} ${d.clientes?.apellido || ''}`, d.descripcion, d.tipo, money(d.monto_total), money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0)), dateFmt(d.fecha_vencimiento), badge(d.estado), <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(d)} onDelete={() => remove(d)} />])}
       />
       <Modal open={open} title={editingId ? 'Editar deuda' : 'Nueva deuda'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
@@ -1073,7 +1450,7 @@ function Deudas({ supabase, user, isAdmin }) {
   );
 }
 
-function Prestamos({ supabase, user }) {
+function Prestamos({ supabase, user, can = () => true }) {
   const emptyForm = { cliente_id: '', descripcion: '', monto_total: '', interes: '0', cuenta_desembolso_id: '', fecha_inicio: today(), fecha_vencimiento: '', notas: '' };
   const [prestamos, setPrestamos] = React.useState([]);
   const [clientes, setClientes] = React.useState([]);
@@ -1112,16 +1489,20 @@ function Prestamos({ supabase, user }) {
     setOpen(true);
   }
   async function remove(prestamo) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction(`Eliminar préstamo ${prestamo.descripcion || ''}? Se revertirá el desembolso.`))) return;
     const { error } = await supabase.rpc('eliminar_prestamo', { p_deuda_id: prestamo.id });
     if (error) {
       notify(error.message);
       return;
     }
+    await logAudit(supabase, user.id, 'prestamos', 'delete', 'Préstamo eliminado', prestamo.id, prestamo);
     load();
   }
   async function save(event) {
     event.preventDefault();
+    if (editingId && !can('edit')) return notify('No tienes permiso para editar.');
+    if (!editingId && !can('create')) return notify('No tienes permiso para crear.');
     if (!form.cliente_id || !form.descripcion || !form.monto_total || !form.cuenta_desembolso_id) {
       notify('Cliente, descripción, monto y cuenta origen son obligatorios.');
       return;
@@ -1143,6 +1524,7 @@ function Prestamos({ supabase, user }) {
       notify(error.message);
       return;
     }
+    await logAudit(supabase, user.id, 'clientes', editingId ? 'update' : 'insert', editingId ? 'Cliente actualizado' : 'Cliente creado', editingId, form);
     setForm(emptyForm);
     setEditingId(null);
     setOpen(false);
@@ -1152,9 +1534,9 @@ function Prestamos({ supabase, user }) {
     <>
       <TableSection
         title="Préstamos otorgados"
-        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo préstamo</button>}
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo préstamo</button>}
         columns={['Cliente', 'Descripción', 'Cuenta origen', 'Desembolsado', 'Cobrado', 'Pendiente', 'Estado']}
-        rows={prestamos.map((p) => [`${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.descripcion, p.cuentas ? `${p.cuentas.banco} - ${p.cuentas.tipo || ''}` : '-', money(p.monto_total), money(p.monto_pagado), money(Number(p.monto_total || 0) - Number(p.monto_pagado || 0)), badge(p.estado), <RowActions onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
+        rows={prestamos.map((p) => [`${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.descripcion, p.cuentas ? `${p.cuentas.banco} - ${p.cuentas.tipo || ''}` : '-', money(p.monto_total), money(p.monto_pagado), money(Number(p.monto_total || 0) - Number(p.monto_pagado || 0)), badge(p.estado), <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
       />
       <Modal open={open} title={editingId ? 'Editar préstamo' : 'Nuevo préstamo'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
@@ -1186,7 +1568,7 @@ function Prestamos({ supabase, user }) {
   );
 }
 
-function CobrosPrestamos({ supabase, user }) {
+function CobrosPrestamos({ supabase, user, can = () => true }) {
   const [pagos, setPagos] = React.useState([]);
   const [clientes, setClientes] = React.useState([]);
   const [prestamos, setPrestamos] = React.useState([]);
@@ -1228,16 +1610,20 @@ function CobrosPrestamos({ supabase, user }) {
     setOpen(true);
   }
   async function remove(pago) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction('Eliminar este cobro? Se revertirá el saldo de la cuenta y el pendiente del préstamo.'))) return;
     const { error } = await supabase.rpc('eliminar_pago', { p_pago_id: pago.id });
     if (error) {
       notify(error.message);
       return;
     }
+    await logAudit(supabase, user.id, 'cuentas', 'delete', 'Cuenta eliminada', cuenta.id, cuenta);
     load();
   }
   async function save(event) {
     event.preventDefault();
+    if (editingId && !can('edit')) return notify('No tienes permiso para editar.');
+    if (!editingId && !can('create')) return notify('No tienes permiso para crear.');
     const payload = {
       p_deuda_id: form.deuda_id,
       p_cliente_id: form.cliente_id,
@@ -1256,6 +1642,7 @@ function CobrosPrestamos({ supabase, user }) {
       notify(error.message);
       return;
     }
+    await logAudit(supabase, user.id, 'cuentas', editingId ? 'update' : 'insert', editingId ? 'Cuenta actualizada' : 'Cuenta creada', editingId, payload);
     setForm({ cliente_id: '', deuda_id: '', cuenta_id: '', monto: '', metodo: 'Transferencia', referencia: '', fecha: today(), notas: '' });
     setEditingId(null);
     setOpen(false);
@@ -1265,9 +1652,9 @@ function CobrosPrestamos({ supabase, user }) {
     <>
       <TableSection
         title="Cobros de préstamos otorgados"
-        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Registrar cobro</button>}
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Registrar cobro</button>}
         columns={['Fecha', 'Cliente', 'Préstamo', 'Monto', 'Método', 'Cuenta destino']}
-        rows={pagos.map((p) => [dateFmt(p.fecha), `${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.deudas?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
+        rows={pagos.map((p) => [dateFmt(p.fecha), `${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.deudas?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
       />
       <Modal open={open} title={editingId ? 'Editar cobro de préstamo' : 'Registrar cobro de préstamo'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
@@ -1299,7 +1686,7 @@ function CobrosPrestamos({ supabase, user }) {
   );
 }
 
-function PrestamosRecibidos({ supabase, user }) {
+function PrestamosRecibidos({ supabase, user, can = () => true }) {
   const emptyForm = { acreedor: '', descripcion: '', monto_original: '', saldo_inicial: '', interes: '0', es_antiguo: true, cuenta_ingreso_id: '', fecha_inicio: today(), fecha_vencimiento: '', notas: '' };
   const [rows, setRows] = React.useState([]);
   const [cuentas, setCuentas] = React.useState([]);
@@ -1346,6 +1733,7 @@ function PrestamosRecibidos({ supabase, user }) {
     setOpen(true);
   }
   async function remove(row) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction(`Eliminar préstamo recibido de ${row.acreedor || ''}?`))) return;
     const { error } = await supabase.rpc('eliminar_prestamo_recibido', { p_prestamo_id: row.id });
     if (error) return notify(error.message);
@@ -1353,6 +1741,8 @@ function PrestamosRecibidos({ supabase, user }) {
   }
   async function save(event) {
     event.preventDefault();
+    if (editingId && !can('edit')) return notify('No tienes permiso para editar.');
+    if (!editingId && !can('create')) return notify('No tienes permiso para crear.');
     const saldo = form.saldo_inicial === '' ? form.monto_original : form.saldo_inicial;
     const payload = {
       p_acreedor: form.acreedor,
@@ -1381,11 +1771,11 @@ function PrestamosRecibidos({ supabase, user }) {
     <>
       <TableSection
         title="Préstamos recibidos"
-        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo préstamo recibido</button>}
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo préstamo recibido</button>}
         columns={['Acreedor', 'Descripción', 'Tipo', 'Monto original', 'Pagado', 'Pendiente', 'Vencimiento', 'Estado']}
         rows={rows.map((row) => {
           const pendiente = Number(row.saldo_inicial || 0) - Number(row.monto_pagado || 0);
-          return [row.acreedor, row.descripcion, row.es_antiguo ? 'Antiguo sin saldo' : `Ingreso a ${row.cuentas?.banco || '-'}`, money(row.monto_original), money(row.monto_pagado), money(pendiente), dateFmt(row.fecha_vencimiento), badge(estado(row)), <RowActions onEdit={() => openEdit(row)} onDelete={() => remove(row)} />];
+          return [row.acreedor, row.descripcion, row.es_antiguo ? 'Antiguo sin saldo' : `Ingreso a ${row.cuentas?.banco || '-'}`, money(row.monto_original), money(row.monto_pagado), money(pendiente), dateFmt(row.fecha_vencimiento), badge(estado(row)), <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(row)} onDelete={() => remove(row)} />];
         })}
       />
       <Modal open={open} title={editingId ? 'Editar préstamo recibido' : 'Nuevo préstamo recibido'} onClose={() => setOpen(false)}>
@@ -1422,7 +1812,7 @@ function PrestamosRecibidos({ supabase, user }) {
   );
 }
 
-function PagosPrestamosRecibidos({ supabase, user }) {
+function PagosPrestamosRecibidos({ supabase, user, can = () => true }) {
   const emptyForm = { prestamo_id: '', cuenta_id: '', monto: '', metodo: 'Transferencia', referencia: '', fecha: today(), notas: '' };
   const [pagos, setPagos] = React.useState([]);
   const [prestamos, setPrestamos] = React.useState([]);
@@ -1461,6 +1851,7 @@ function PagosPrestamosRecibidos({ supabase, user }) {
     setOpen(true);
   }
   async function remove(row) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction('Eliminar este pago? Se revertirá el saldo de la cuenta y el pendiente.'))) return;
     const { error } = await supabase.rpc('eliminar_pago_prestamo_recibido', { p_pago_id: row.id });
     if (error) return notify(error.message);
@@ -1468,6 +1859,8 @@ function PagosPrestamosRecibidos({ supabase, user }) {
   }
   async function save(event) {
     event.preventDefault();
+    if (editingId && !can('edit')) return notify('No tienes permiso para editar.');
+    if (!editingId && !can('create')) return notify('No tienes permiso para crear.');
     const payload = {
       p_prestamo_id: form.prestamo_id,
       p_cuenta_id: form.cuenta_id || null,
@@ -1491,9 +1884,9 @@ function PagosPrestamosRecibidos({ supabase, user }) {
     <>
       <TableSection
         title="Pagos de préstamos recibidos"
-        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo pago</button>}
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo pago</button>}
         columns={['Fecha', 'Acreedor', 'Préstamo', 'Monto', 'Método', 'Cuenta origen']}
-        rows={pagos.map((p) => [dateFmt(p.fecha), p.prestamos_recibidos?.acreedor || '-', p.prestamos_recibidos?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
+        rows={pagos.map((p) => [dateFmt(p.fecha), p.prestamos_recibidos?.acreedor || '-', p.prestamos_recibidos?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
       />
       <Modal open={open} title={editingId ? 'Editar pago de préstamo recibido' : 'Nuevo pago de préstamo recibido'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
@@ -1524,7 +1917,7 @@ function PagosPrestamosRecibidos({ supabase, user }) {
   );
 }
 
-function Pagos({ supabase, user, isAdmin }) {
+function Pagos({ supabase, user, isAdmin, can = () => true }) {
   const [pagos, setPagos] = React.useState([]);
   const [clientes, setClientes] = React.useState([]);
   const [deudas, setDeudas] = React.useState([]);
@@ -1563,6 +1956,7 @@ function Pagos({ supabase, user, isAdmin }) {
     setOpen(true);
   }
   async function remove(pago) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction('Eliminar este pago? Se revertira la deuda y el saldo de la cuenta.'))) return;
     const { error } = await supabase.rpc('eliminar_pago', { p_pago_id: pago.id });
     if (error) {
@@ -1605,9 +1999,9 @@ function Pagos({ supabase, user, isAdmin }) {
     <>
       <TableSection
         title="Cobros generales"
-        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Registrar pago</button>}
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Registrar pago</button>}
         columns={['Fecha', 'Cliente', 'Deuda', 'Monto', 'Método', 'Cuenta']}
-        rows={pagos.map((p) => [dateFmt(p.fecha), `${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.deudas?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
+        rows={pagos.map((p) => [dateFmt(p.fecha), `${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.deudas?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
       />
       <Modal open={open} title={editingId ? 'Editar pago' : 'Registrar pago'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
@@ -1638,7 +2032,7 @@ function Pagos({ supabase, user, isAdmin }) {
   );
 }
 
-function Movimientos({ supabase, user, isAdmin }) {
+function Movimientos({ supabase, user, isAdmin, can = () => true }) {
   const [movimientos, setMovimientos] = React.useState([]);
   const [tipos, setTipos] = React.useState([]);
   const [cuentas, setCuentas] = React.useState([]);
@@ -1676,6 +2070,7 @@ function Movimientos({ supabase, user, isAdmin }) {
     setOpen(true);
   }
   async function remove(movimiento) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction(`Eliminar movimiento ${movimiento.concepto || ''}?`))) return;
     const { error } = await supabase.rpc('eliminar_movimiento_financiero', { p_movimiento_id: movimiento.id });
     if (error) {
@@ -1710,6 +2105,8 @@ function Movimientos({ supabase, user, isAdmin }) {
   }
   async function saveTipo(event) {
     event.preventDefault();
+    if (tipoEditingId && !can('edit')) return notify('No tienes permiso para editar tipos.');
+    if (!tipoEditingId && !can('create')) return notify('No tienes permiso para crear tipos.');
     if (!tipoForm.nombre) return;
     const { error } = tipoEditingId
       ? await supabase.from('tipos_movimiento').update(tipoForm).eq('id', tipoEditingId).eq('admin_id', user.id)
@@ -1727,6 +2124,7 @@ function Movimientos({ supabase, user, isAdmin }) {
     setTipoForm({ tipo: tipo.tipo, nombre: tipo.nombre });
   }
   async function removeTipo(tipo) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar tipos.');
     if (!(await confirmAction(`Eliminar tipo ${tipo.nombre || ''}?`))) return;
     const { error } = await supabase.from('tipos_movimiento').delete().eq('id', tipo.id).eq('admin_id', user.id);
     if (error) {
@@ -1744,9 +2142,9 @@ function Movimientos({ supabase, user, isAdmin }) {
     <>
       <TableSection
         title="Historial de movimientos"
-        action={<div className="table-actions"><button className="btn" onClick={() => setTiposOpen(true)}><Settings size={16} />Tipos</button><button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo movimiento</button></div>}
+        action={<div className="table-actions">{(can('create') || can('edit') || can('delete')) && <button className="btn" onClick={() => setTiposOpen(true)}><Settings size={16} />Tipos</button>}{can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo movimiento</button>}</div>}
         columns={['Fecha', 'Tipo', 'Concepto', 'Tipo de movimiento', 'Cuenta', 'Monto']}
-        rows={movimientos.map((m) => [dateFmt(m.fecha), badge(m.tipo), m.concepto, m.tipos_movimiento?.nombre || m.categoria || '-', m.cuentas ? `${m.cuentas.banco} - ${m.cuentas.tipo || ''}` : '-', money(m.monto), <RowActions onEdit={() => openEdit(m)} onDelete={() => remove(m)} />])}
+        rows={movimientos.map((m) => [dateFmt(m.fecha), badge(m.tipo), m.concepto, m.tipos_movimiento?.nombre || m.categoria || '-', m.cuentas ? `${m.cuentas.banco} - ${m.cuentas.tipo || ''}` : '-', money(m.monto), <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(m)} onDelete={() => remove(m)} />])}
       />
       <Modal open={open} title={editingId ? 'Editar movimiento' : 'Nuevo movimiento'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
@@ -1777,7 +2175,7 @@ function Movimientos({ supabase, user, isAdmin }) {
               <Field label="Nombre" value={tipoForm.nombre} onChange={(v) => setTipoForm({ ...tipoForm, nombre: v })} placeholder="Pago empresa, Servicios..." required />
             </div>
             <div className="mini-list">
-              {tipos.map((t) => <div key={t.id} className="list-row type-row"><span>{badge(t.tipo)} {t.nombre}</span><RowActions onEdit={() => editTipo(t)} onDelete={() => removeTipo(t)} /></div>)}
+              {tipos.map((t) => <div key={t.id} className="list-row type-row"><span>{badge(t.tipo)} {t.nombre}</span><RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => editTipo(t)} onDelete={() => removeTipo(t)} /></div>)}
             </div>
           </div>
           <div className="modal-footer"><button type="button" className="btn" onClick={() => setTiposOpen(false)}>Cerrar</button><button className="btn btn-primary">{tipoEditingId ? <Check size={16} /> : <Plus size={16} />}{tipoEditingId ? 'Actualizar' : 'Agregar'}</button></div>
@@ -1787,7 +2185,7 @@ function Movimientos({ supabase, user, isAdmin }) {
   );
 }
 
-function Presupuestos({ supabase, user }) {
+function Presupuestos({ supabase, user, can = () => true }) {
   const emptyForm = { mes: month(), tipo: 'egreso', tipo_movimiento_id: '', categoria: '', monto_limite: '', notas: '' };
   const [rows, setRows] = React.useState([]);
   const [tipos, setTipos] = React.useState([]);
@@ -1824,6 +2222,7 @@ function Presupuestos({ supabase, user }) {
     setOpen(true);
   }
   async function remove(row) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction(`Eliminar presupuesto ${row.categoria || row.tipos_movimiento?.nombre || ''}?`))) return;
     const { error } = await supabase.from('presupuestos').delete().eq('id', row.id).eq('admin_id', user.id);
     if (error) return notify(error.message);
@@ -1832,6 +2231,8 @@ function Presupuestos({ supabase, user }) {
   }
   async function save(event) {
     event.preventDefault();
+    if (editingId && !can('edit')) return notify('No tienes permiso para editar.');
+    if (!editingId && !can('create')) return notify('No tienes permiso para crear.');
     const selected = tipos.find((t) => t.id === form.tipo_movimiento_id);
     const payload = {
       ...form,
@@ -1864,11 +2265,11 @@ function Presupuestos({ supabase, user }) {
     <>
       <TableSection
         title="Presupuestos"
-        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo presupuesto</button>}
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo presupuesto</button>}
         columns={['Mes', 'Tipo', 'Categoría', 'Límite', 'Usado', 'Avance']}
         rows={rows.map((row) => {
           const u = usage(row);
-          return [row.mes, badge(row.tipo), row.tipos_movimiento?.nombre || row.categoria || '-', money(row.monto_limite), money(u.used), <div className="progress-cell"><div className="progress-bar"><span style={{ width: `${Math.min(100, u.pct)}%` }} /></div><b>{u.pct}%</b></div>, <RowActions onEdit={() => openEdit(row)} onDelete={() => remove(row)} />];
+          return [row.mes, badge(row.tipo), row.tipos_movimiento?.nombre || row.categoria || '-', money(row.monto_limite), money(u.used), <div className="progress-cell"><div className="progress-bar"><span style={{ width: `${Math.min(100, u.pct)}%` }} /></div><b>{u.pct}%</b></div>, <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(row)} onDelete={() => remove(row)} />];
         })}
       />
       <Modal open={open} title={editingId ? 'Editar presupuesto' : 'Nuevo presupuesto'} onClose={() => setOpen(false)}>
@@ -1893,7 +2294,7 @@ function Presupuestos({ supabase, user }) {
   );
 }
 
-function Metas({ supabase, user }) {
+function Metas({ supabase, user, can = () => true }) {
   const emptyForm = { nombre: '', descripcion: '', monto_objetivo: '', monto_actual: '', fecha_objetivo: '', estado: 'activa' };
   const [rows, setRows] = React.useState([]);
   const [open, setOpen] = React.useState(false);
@@ -1912,6 +2313,7 @@ function Metas({ supabase, user }) {
     setOpen(true);
   }
   async function remove(row) {
+    if (!can('delete')) return notify('No tienes permiso para eliminar.');
     if (!(await confirmAction(`Eliminar meta ${row.nombre || ''}?`))) return;
     const { error } = await supabase.from('metas').delete().eq('id', row.id).eq('admin_id', user.id);
     if (error) return notify(error.message);
@@ -1920,6 +2322,8 @@ function Metas({ supabase, user }) {
   }
   async function save(event) {
     event.preventDefault();
+    if (editingId && !can('edit')) return notify('No tienes permiso para editar.');
+    if (!editingId && !can('create')) return notify('No tienes permiso para crear.');
     const payload = { ...form, admin_id: user.id, monto_objetivo: Number(form.monto_objetivo || 0), monto_actual: Number(form.monto_actual || 0), fecha_objetivo: form.fecha_objetivo || null, updated_at: new Date().toISOString() };
     const { error } = editingId
       ? await supabase.from('metas').update(payload).eq('id', editingId).eq('admin_id', user.id)
@@ -1935,11 +2339,11 @@ function Metas({ supabase, user }) {
     <>
       <TableSection
         title="Metas financieras"
-        action={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva meta</button>}
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva meta</button>}
         columns={['Meta', 'Objetivo', 'Actual', 'Avance', 'Fecha', 'Estado']}
         rows={rows.map((row) => {
           const pct = Number(row.monto_objetivo || 0) ? Math.round((Number(row.monto_actual || 0) / Number(row.monto_objetivo || 0)) * 100) : 0;
-          return [row.nombre, money(row.monto_objetivo), money(row.monto_actual), <div className="progress-cell"><div className="progress-bar"><span style={{ width: `${Math.min(100, pct)}%` }} /></div><b>{pct}%</b></div>, dateFmt(row.fecha_objetivo), badge(row.estado), <RowActions onEdit={() => openEdit(row)} onDelete={() => remove(row)} />];
+          return [row.nombre, money(row.monto_objetivo), money(row.monto_actual), <div className="progress-cell"><div className="progress-bar"><span style={{ width: `${Math.min(100, pct)}%` }} /></div><b>{pct}%</b></div>, dateFmt(row.fecha_objetivo), badge(row.estado), <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(row)} onDelete={() => remove(row)} />];
         })}
       />
       <Modal open={open} title={editingId ? 'Editar meta' : 'Nueva meta'} onClose={() => setOpen(false)}>
@@ -1963,8 +2367,10 @@ function Metas({ supabase, user }) {
   );
 }
 
-function Backup({ supabase, user }) {
+function Backup({ supabase, user, can = () => true }) {
   const [status, setStatus] = React.useState('');
+  const clientesFileRef = React.useRef(null);
+  const movimientosFileRef = React.useRef(null);
   async function collectData() {
     const tables = ['profiles', 'clientes', 'cuentas', 'deudas', 'pagos', 'movimientos', 'tipos_movimiento', 'presupuestos', 'metas', 'auditoria'];
     const result = {};
@@ -1976,40 +2382,128 @@ function Backup({ supabase, user }) {
     return result;
   }
   async function exportJson() {
+    if (!can('export')) return notify('No tienes permiso para exportar.');
     setStatus('Preparando backup...');
     const data = await collectData();
     downloadText(`fintrack-backup-${today()}.json`, JSON.stringify({ exported_at: new Date().toISOString(), user_id: user.id, data }, null, 2));
     setStatus('Backup JSON generado.');
   }
   async function exportCsv(table) {
+    if (!can('export')) return notify('No tienes permiso para exportar.');
     const data = await collectData();
     const rows = Array.isArray(data[table]) ? data[table] : [];
     downloadText(`fintrack-${table}-${today()}.csv`, toCsv(rows), 'text/csv');
     setStatus(`CSV de ${table} generado.`);
   }
+  function downloadTemplate(type) {
+    const content = type === 'clientes'
+      ? 'nombre,apellido,tipo_doc,documento,telefono,email,direccion,notas\nJuan,Perez,DNI,12345678,999999999,juan@email.com,Direccion,Nota\n'
+      : 'fecha,tipo,categoria,descripcion,monto\n2026-07-01,egreso,Servicios,Internet,120.00\n';
+    downloadText(`plantilla-${type}.csv`, content, 'text/csv');
+  }
+  async function importCsvFile(event, type) {
+    if (!can('create')) return notify('No tienes permiso para importar.');
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setStatus('Importando CSV...');
+    let rows = [];
+    if (file.name.toLowerCase().endsWith('.xlsx')) {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' })
+        .map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [String(key).toLowerCase(), String(value)])));
+    } else {
+      rows = parseCsv(await file.text());
+    }
+    if (!rows.length) {
+      setStatus('El archivo no tiene datos.');
+      event.target.value = '';
+      return;
+    }
+    const payload = rows.map((row) => type === 'clientes' ? {
+      admin_id: user.id,
+      nombre: row.nombre || row.name || '',
+      apellido: row.apellido || '',
+      tipo_doc: row.tipo_doc || 'DNI',
+      documento: row.documento || '',
+      telefono: row.telefono || '',
+      email: row.email || '',
+      direccion: row.direccion || '',
+      notas: row.notas || '',
+    } : {
+      admin_id: user.id,
+      fecha: row.fecha || today(),
+      tipo: row.tipo === 'ingreso' ? 'ingreso' : 'egreso',
+      categoria: row.categoria || 'Importado',
+      descripcion: row.descripcion || row.detalle || 'Importado CSV',
+      monto: Number(String(row.monto || '0').replace(',', '.')),
+    }).filter((row) => type === 'clientes' ? row.nombre : row.monto > 0);
+    if (!payload.length) {
+      setStatus('No se encontraron filas válidas para importar.');
+      event.target.value = '';
+      return;
+    }
+    const { error } = await supabase.from(type === 'clientes' ? 'clientes' : 'movimientos').insert(payload);
+    if (error) setStatus(error.message);
+    else setStatus(`${payload.length} registros importados en ${type}.`);
+    event.target.value = '';
+  }
   return (
     <div className="grid-2">
       <div className="card"><div className="card-header"><h3>Backup completo</h3></div><div className="card-body">
         <p className="muted">Exporta una copia JSON con tus datos principales. Esto no restaura datos automáticamente; sirve como respaldo y auditoría.</p>
-        <button className="btn btn-primary backup-button" onClick={exportJson}><FileDown size={16} />Descargar backup JSON</button>
+        {can('export') && <button className="btn btn-primary backup-button" onClick={exportJson}><FileDown size={16} />Descargar backup JSON</button>}
         {status && <div className="connection-status success">{status}</div>}
       </div></div>
       <div className="card"><div className="card-header"><h3>Exportar CSV</h3></div><div className="card-body backup-actions">
-        {['clientes', 'cuentas', 'deudas', 'pagos', 'movimientos', 'presupuestos', 'metas'].map((table) => <button key={table} className="btn" onClick={() => exportCsv(table)}><FileDown size={16} />{table}</button>)}
+        {can('export') ? ['clientes', 'cuentas', 'deudas', 'pagos', 'movimientos', 'presupuestos', 'metas'].map((table) => <button key={table} className="btn" onClick={() => exportCsv(table)}><FileDown size={16} />{table}</button>) : <p className="muted">No tienes permiso para exportar.</p>}
+      </div></div>
+      <div className="card"><div className="card-header"><h3>Importar CSV</h3></div><div className="card-body backup-actions">
+        <input ref={clientesFileRef} type="file" accept=".csv,.xlsx,text/csv" hidden onChange={(event) => importCsvFile(event, 'clientes')} />
+        <input ref={movimientosFileRef} type="file" accept=".csv,.xlsx,text/csv" hidden onChange={(event) => importCsvFile(event, 'movimientos')} />
+        <button className="btn" type="button" onClick={() => downloadTemplate('clientes')}><FileDown size={16} />Plantilla clientes</button>
+        {can('create') && <button className="btn btn-primary" type="button" onClick={() => clientesFileRef.current?.click()}>Importar clientes</button>}
+        <button className="btn" type="button" onClick={() => downloadTemplate('movimientos')}><FileDown size={16} />Plantilla movimientos</button>
+        {can('create') && <button className="btn btn-primary" type="button" onClick={() => movimientosFileRef.current?.click()}>Importar movimientos</button>}
       </div></div>
     </div>
   );
 }
 
-function Auditoria({ supabase, user }) {
+function Auditoria({ supabase, user, can = () => true }) {
   const [rows, setRows] = React.useState([]);
+  const [query, setQuery] = React.useState('');
+  const [action, setAction] = React.useState('');
   React.useEffect(() => {
     supabase.from('auditoria').select('*').eq('admin_id', user.id).order('created_at', { ascending: false }).limit(200).then(({ data }) => setRows(data || []));
   }, [supabase, user.id]);
-  return <TableSection title="Auditoría" columns={['Fecha', 'Tabla', 'Acción', 'Descripción']} rows={rows.map((row) => [new Date(row.created_at).toLocaleString('es-PE'), row.tabla, row.accion, row.descripcion || '-'])} />;
+  const filtered = rows.filter((row) => {
+    const text = `${row.tabla || ''} ${row.accion || ''} ${row.descripcion || ''}`.toLowerCase();
+    return (!query || text.includes(query.toLowerCase())) && (!action || row.accion === action);
+  });
+  const exportCsv = () => {
+    if (!can('export')) return notify('No tienes permiso para exportar.');
+    return downloadText(`fintrack-auditoria-${today()}.csv`, toCsv(filtered.map((row) => ({
+    fecha: row.created_at ? new Date(row.created_at).toLocaleString('es-PE') : '',
+    tabla: row.tabla,
+    accion: row.accion,
+    descripcion: row.descripcion,
+    registro_id: row.registro_id,
+    }))), 'text/csv');
+  };
+  return (
+    <>
+      <div className="card report-filters"><div className="card-body audit-filters">
+        <Field label="Buscar" value={query} onChange={setQuery} placeholder="Tabla, acción o descripción..." />
+        <SelectField label="Acción" value={action} onChange={setAction}><option value="">Todas</option><option value="insert">Insertar</option><option value="update">Actualizar</option><option value="delete">Eliminar</option></SelectField>
+        {can('export') && <button className="btn" type="button" onClick={exportCsv}><FileDown size={16} />Exportar auditoría</button>}
+      </div></div>
+      <TableSection title="Auditoría" columns={['Fecha', 'Tabla', 'Acción', 'Descripción']} rows={filtered.map((row) => [new Date(row.created_at).toLocaleString('es-PE'), row.tabla, row.accion, row.descripcion || '-'])} />
+    </>
+  );
 }
 
-function Reportes({ supabase, user }) {
+function Reportes({ supabase, user, can = () => true }) {
   const [rows, setRows] = React.useState([]);
   const [movimientos, setMovimientos] = React.useState([]);
   const [presupuestos, setPresupuestos] = React.useState([]);
@@ -2057,6 +2551,7 @@ function Reportes({ supabase, user }) {
   }, {});
   const tableRows = Object.entries(summary).map(([name, r]) => [name, money(r.total), money(r.pagado), money(r.total - r.pagado), r.total - r.pagado <= 0 ? badge('pagado') : badge('vencido')]);
   const exportClientesCsv = () => {
+    if (!can('export')) return notify('No tienes permiso para exportar.');
     const csvRows = Object.entries(summary).map(([cliente, r]) => ({
       cliente,
       deuda_total: Number(r.total || 0).toFixed(2),
@@ -2075,13 +2570,75 @@ function Reportes({ supabase, user }) {
     return map;
   }, {});
   const filteredTipos = tipos.filter((tipo) => !filters.tipo || tipo.tipo === filters.tipo);
-  const exportResumen = () => downloadText(`fintrack-reporte-${today()}.json`, JSON.stringify({
-    filtros: filters,
-    pendientes: summary,
-    movimientos: Object.values(movimientosPorTipo),
-    presupuestos,
-    metas,
-  }, null, 2));
+  const exportResumen = () => {
+    if (!can('export')) return notify('No tienes permiso para exportar.');
+    return downloadText(`fintrack-reporte-${today()}.json`, JSON.stringify({
+      filtros: filters,
+      pendientes: summary,
+      movimientos: Object.values(movimientosPorTipo),
+      presupuestos,
+      metas,
+    }, null, 2));
+  };
+  const exportPdf = () => {
+    if (!can('export')) return notify('No tienes permiso para exportar.');
+    const company = getCompanyConfig();
+    const movimientosRows = Object.values(movimientosPorTipo);
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <title>Reporte FinTrack ${today()}</title>
+          <style>
+            body{font-family:Arial,sans-serif;color:#0f1923;margin:32px}
+            .header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:2px solid #0f765f;padding-bottom:18px}
+            .company{display:flex;gap:14px;align-items:center}
+            .logo{width:58px;height:58px;border-radius:16px;object-fit:cover;background:#1d9e75}
+            h1{margin:0 0 4px;font-size:24px} h2{font-size:16px;margin-top:24px}
+            .muted{color:#60758a;font-size:12px;margin-bottom:20px}
+            .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
+            .card{border:1px solid #dce6ef;border-radius:14px;padding:14px}
+            .label{color:#60758a;font-size:11px;text-transform:uppercase;font-weight:700}
+            .value{font-size:20px;font-weight:800;margin-top:6px}
+            table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+            th,td{border-bottom:1px solid #e1e9f0;padding:9px;text-align:left}
+            th{background:#f3f7fa;color:#51677f;text-transform:uppercase;font-size:10px}
+            @media print{button{display:none} body{margin:20px}}
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company">
+              ${company.logo_url ? `<img class="logo" src="${escapeHtml(company.logo_url)}" />` : '<div class="logo"></div>'}
+              <div>
+                <h1>${escapeHtml(company.nombre || 'FinTrack Pro')}</h1>
+                <div class="muted">${escapeHtml(company.documento || '')}${company.direccion ? ` · ${escapeHtml(company.direccion)}` : ''}${company.telefono ? ` · ${escapeHtml(company.telefono)}` : ''}</div>
+              </div>
+            </div>
+            <div class="muted">Generado: ${escapeHtml(new Date().toLocaleString('es-PE'))}<br/>Desde ${escapeHtml(filters.desde || '-')} hasta ${escapeHtml(filters.hasta || '-')}</div>
+          </div>
+          <div class="cards">
+            <div class="card"><div class="label">Ingresos</div><div class="value">${escapeHtml(money(ingresos))}</div></div>
+            <div class="card"><div class="label">Egresos</div><div class="value">${escapeHtml(money(egresos))}</div></div>
+            <div class="card"><div class="label">Presupuestos</div><div class="value">${presupuestos.length}</div></div>
+            <div class="card"><div class="label">Metas activas</div><div class="value">${metas.filter((m) => m.estado === 'activa').length}</div></div>
+          </div>
+          <h2>Resumen por cliente</h2>
+          <table><thead><tr><th>Cliente</th><th>Deuda total</th><th>Pagado</th><th>Pendiente</th></tr></thead><tbody>
+            ${Object.entries(summary).map(([cliente, r]) => `<tr><td>${escapeHtml(cliente)}</td><td>${escapeHtml(money(r.total))}</td><td>${escapeHtml(money(r.pagado))}</td><td>${escapeHtml(money(r.total - r.pagado))}</td></tr>`).join('') || '<tr><td colspan="4">Sin datos</td></tr>'}
+          </tbody></table>
+          <h2>Ingresos y egresos por tipo</h2>
+          <table><thead><tr><th>Tipo</th><th>Categoría</th><th>Total</th></tr></thead><tbody>
+            ${movimientosRows.map((row) => `<tr><td>${escapeHtml(row.tipo)}</td><td>${escapeHtml(row.categoria)}</td><td>${escapeHtml(money(row.total))}</td></tr>`).join('') || '<tr><td colspan="3">Sin datos</td></tr>'}
+          </tbody></table>
+          <script>window.onload=()=>{window.print();}</script>
+        </body>
+      </html>`;
+    const win = window.open('', '_blank');
+    if (!win) return notify('El navegador bloqueó la ventana del PDF. Permite ventanas emergentes para exportar.');
+    win.document.write(html);
+    win.document.close();
+  };
   return (
     <>
       <div className="card report-filters">
@@ -2121,8 +2678,8 @@ function Reportes({ supabase, user }) {
         <MetricCard icon={<ClipboardList />} label="Presupuestos" value={presupuestos.length} helper="Controles configurados" />
         <MetricCard icon={<Target />} label="Metas activas" value={metas.filter((m) => m.estado === 'activa').length} helper={`${metas.length} metas registradas`} />
       </div>
-      <div className="action-bar"><div /><button className="btn btn-primary" onClick={exportResumen}><FileDown size={16} />Exportar reporte JSON</button></div>
-      <TableSection title="Resumen por cliente" columns={['Cliente', 'Deuda total', 'Pagado', 'Pendiente', 'Estado']} rows={tableRows} onExport={exportClientesCsv} />
+      <div className="action-bar"><div /><div className="table-actions">{can('export') && <button className="btn" onClick={exportPdf}><FileDown size={16} />Exportar PDF</button>}{can('export') && <button className="btn btn-primary" onClick={exportResumen}><FileDown size={16} />Exportar reporte JSON</button>}</div></div>
+      <TableSection title="Resumen por cliente" columns={['Cliente', 'Deuda total', 'Pagado', 'Pendiente', 'Estado']} rows={tableRows} onExport={can('export') ? exportClientesCsv : null} />
       <div className="report-spacer" />
       <TableSection title="Ingresos y egresos por tipo" columns={['Tipo', 'Categoría', 'Total']} rows={Object.values(movimientosPorTipo).map((row) => [badge(row.tipo), row.categoria, money(row.total)])} />
     </>
@@ -2133,7 +2690,10 @@ function UsuariosAdmin({ supabase, user }) {
   const [rows, setRows] = React.useState([]);
   const [query, setQuery] = React.useState('');
   const [open, setOpen] = React.useState(false);
+  const [permissionsOpen, setPermissionsOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState(null);
+  const [permissionsUser, setPermissionsUser] = React.useState(null);
+  const [permissionRows, setPermissionRows] = React.useState({});
   const [form, setForm] = React.useState({ nombre: '', apellido: '', tipo_doc: 'DNI', documento: '', email_contacto: '', telefono: '', direccion: '', empresa: '', moneda: 'PEN', role: 'user' });
   const load = React.useCallback(async () => {
     const { data, error } = await supabase.rpc('admin_listar_usuarios');
@@ -2200,6 +2760,43 @@ function UsuariosAdmin({ supabase, user }) {
     notify('Usuario eliminado lógicamente.', 'success');
     load();
   }
+  async function openPermissions(row) {
+    if (row.id === user.id) return notify('No necesitas configurar permisos para tu propio usuario.');
+    setPermissionsUser(row);
+    const defaults = MODULE_PERMISSIONS.reduce((map, [modulo]) => ({
+      ...map,
+      [modulo]: { modulo, can_view: true, can_create: false, can_edit: false, can_delete: false, can_export: false },
+    }), {});
+    const { data, error } = await supabase.from('user_permissions').select('*').eq('user_id', row.id);
+    if (error) {
+      notify('Ejecuta primero PERMISOS-AUDITORIA-AVANZADA.sql en Supabase.');
+      return;
+    }
+    setPermissionRows((data || []).reduce((map, item) => ({ ...map, [item.modulo]: { ...defaults[item.modulo], ...item } }), defaults));
+    setPermissionsOpen(true);
+  }
+  function setPerm(moduleId, field, checked) {
+    setPermissionRows((current) => ({ ...current, [moduleId]: { ...current[moduleId], [field]: checked } }));
+  }
+  async function savePermissions(event) {
+    event.preventDefault();
+    if (!permissionsUser) return;
+    const payload = Object.values(permissionRows).map((row) => ({
+      admin_id: user.id,
+      user_id: permissionsUser.id,
+      modulo: row.modulo,
+      can_view: !!row.can_view,
+      can_create: !!row.can_create,
+      can_edit: !!row.can_edit,
+      can_delete: !!row.can_delete,
+      can_export: !!row.can_export,
+      updated_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase.from('user_permissions').upsert(payload, { onConflict: 'user_id,modulo' });
+    if (error) return notify(error.message);
+    notify('Permisos actualizados.', 'success');
+    setPermissionsOpen(false);
+  }
   const filtered = rows.filter((row) => `${row.nombre || ''} ${row.apellido || ''} ${row.email_contacto || ''} ${row.role || ''}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <>
@@ -2214,7 +2811,7 @@ function UsuariosAdmin({ supabase, user }) {
           row.role || 'user',
           row.deleted_at ? <span className="badge badge-red">Eliminado</span> : <span className={`badge ${row.activo ? 'badge-green' : 'badge-yellow'}`}>{row.activo ? 'Activo' : 'Inactivo'}</span>,
           row.created_at ? new Date(row.created_at).toLocaleDateString('es-PE') : '-',
-          row.id === user.id ? <span className="muted">Usuario actual</span> : <div className="row-actions"><button className="btn btn-sm btn-icon" type="button" title="Editar" onClick={() => openEdit(row)}><Pencil size={14} /></button><button className="btn btn-sm" type="button" onClick={() => toggle(row)}>{row.activo ? 'Desactivar' : 'Activar'}</button><button className="btn btn-sm btn-danger" type="button" onClick={() => remove(row)}>Eliminar</button></div>,
+          row.id === user.id ? <span className="muted">Usuario actual</span> : <div className="row-actions"><button className="btn btn-sm btn-icon" type="button" title="Editar" onClick={() => openEdit(row)}><Pencil size={14} /></button><button className="btn btn-sm" type="button" onClick={() => openPermissions(row)}>Permisos</button><button className="btn btn-sm" type="button" onClick={() => toggle(row)}>{row.activo ? 'Desactivar' : 'Activar'}</button><button className="btn btn-sm btn-danger" type="button" onClick={() => remove(row)}>Eliminar</button></div>,
         ])}
       />
       <Modal open={open} title="Editar usuario" onClose={() => setOpen(false)}>
@@ -2238,6 +2835,37 @@ function UsuariosAdmin({ supabase, user }) {
             </div>
           </div>
           <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />Guardar cambios</button></div>
+        </form>
+      </Modal>
+      <Modal open={permissionsOpen} title={`Permisos de ${permissionsUser?.nombre || 'usuario'}`} onClose={() => setPermissionsOpen(false)}>
+        <form onSubmit={savePermissions}>
+          <div className="modal-body permissions-panel">
+            <p className="permissions-help">Define qué módulos puede ver este usuario y qué acciones puede realizar dentro de cada uno.</p>
+            {MODULE_PERMISSIONS.map(([moduleId, label]) => {
+              const row = permissionRows[moduleId] || {};
+              const activeCount = PERMISSION_FIELDS.filter(([field]) => row[field]).length;
+              return (
+                <div className="permission-card" key={moduleId}>
+                  <div className="permission-card-header">
+                    <div>
+                      <strong>{label}</strong>
+                      <small>{activeCount} permisos activos</small>
+                    </div>
+                    <span className={`badge ${row.can_view ? 'badge-green' : 'badge-gray'}`}>{row.can_view ? 'Visible' : 'Oculto'}</span>
+                  </div>
+                  <div className="permission-actions">
+                    {PERMISSION_FIELDS.map(([field, text]) => (
+                      <label className={`permission-check ${row[field] ? 'active' : ''}`} key={field}>
+                        <input type="checkbox" checked={!!row[field]} onChange={(event) => setPerm(moduleId, field, event.target.checked)} />
+                        <span>{text}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="modal-footer"><button type="button" className="btn" onClick={() => setPermissionsOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />Guardar permisos</button></div>
         </form>
       </Modal>
     </>
@@ -2313,6 +2941,16 @@ function Perfil({ supabase, user, profile, onSaved }) {
     setPasswordForm({ password: '', confirm: '' });
     setPasswordStatus('Contraseña actualizada correctamente.');
   }
+  async function signOutEverywhere() {
+    if (!(await confirmAction('Cerrar sesión en todos tus dispositivos? Tendrás que volver a iniciar sesión.'))) return;
+    const { error } = await supabase.auth.signOut({ scope: 'global' });
+    if (error) {
+      setPasswordStatus(error.message);
+      return;
+    }
+    clearRememberedAccount();
+    window.location.reload();
+  }
   const setPinField = (field, value) => setPinForm((current) => ({ ...current, [field]: value.replace(/\D/g, '').slice(0, 6) }));
   return <div className="profile-section">
     <div className="card profile-main-card"><div className="card-header"><h3>Información personal</h3></div><form className="card-body" onSubmit={save}>
@@ -2352,9 +2990,12 @@ function Perfil({ supabase, user, profile, onSaved }) {
           rightElement={<button className="input-action" type="button" onClick={() => setShowProfilePassword((value) => !value)}>{showProfilePassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
         />
         <Field label="Confirmar contraseña" type={showProfilePassword ? 'text' : 'password'} value={passwordForm.confirm} onChange={(v) => setPasswordForm({ ...passwordForm, confirm: v })} required minLength={8} />
-        {passwordStatus && <div className={`connection-status ${passwordStatus.includes('correctamente') ? 'success' : ''}`}>{passwordStatus}</div>}
+      {passwordStatus && <div className={`connection-status ${passwordStatus.includes('correctamente') ? 'success' : ''}`}>{passwordStatus}</div>}
+      <div className="table-actions">
         <button className="btn btn-primary"><Check size={16} />Cambiar contraseña</button>
-      </form></div>
+        <button className="btn btn-danger" type="button" onClick={signOutEverywhere}><LogOut size={16} />Cerrar sesión en todos</button>
+      </div>
+    </form></div>
     </div>
   </div>;
 }

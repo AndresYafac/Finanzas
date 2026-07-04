@@ -101,11 +101,11 @@ export function Modal({ open, title, onClose, children }) {
   );
 }
 
-export function RowActions({ onEdit, onDelete }) {
+export function RowActions({ onEdit, onDelete, canEdit = true, canDelete = true }) {
   return (
     <div className="row-actions">
-      <button type="button" className="btn btn-sm btn-icon" onClick={onEdit} title="Editar"><Pencil size={14} /></button>
-      <button type="button" className="btn btn-sm btn-icon btn-danger" onClick={onDelete} title="Eliminar"><Trash2 size={14} /></button>
+      {canEdit && <button type="button" className="btn btn-sm btn-icon" onClick={onEdit} title="Editar"><Pencil size={14} /></button>}
+      {canDelete && <button type="button" className="btn btn-sm btn-icon btn-danger" onClick={onDelete} title="Eliminar"><Trash2 size={14} /></button>}
     </div>
   );
 }
