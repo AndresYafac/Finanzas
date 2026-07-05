@@ -86,11 +86,11 @@ export function SelectField({ label, value, onChange, children }) {
   );
 }
 
-export function Modal({ open, title, onClose, children }) {
+export function Modal({ open, title, onClose, children, className = '' }) {
   if (!open) return null;
   return (
     <div className="modal-overlay open" onMouseDown={onClose}>
-      <div className="modal" onMouseDown={(event) => event.stopPropagation()}>
+      <div className={`modal ${className}`.trim()} onMouseDown={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h3>{title}</h3>
           <button className="close-btn" onClick={onClose} type="button">X</button>

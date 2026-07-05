@@ -1,13 +1,81 @@
 import { LOCKED_KEY, REMEMBER_EMAIL_KEY, REMEMBER_KEY } from '../constants/authStorage';
+import { storage } from '../services/storage.service';
+
+const LOGIN_ATTEMPTS_KEY = 'fintrack_login_attempts';
+const LOGIN_LOCK_UNTIL_KEY = 'fintrack_login_locked_until';
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_LOCK_MS = 5 * 60 * 1000;
+
+function normalizeEmail(email = '') {
+  return email.trim().toLowerCase();
+}
+
+function getLoginState(email) {
+  const state = storage.getJson(LOGIN_ATTEMPTS_KEY, {});
+  return state[normalizeEmail(email)] || { count: 0, lastAttemptAt: 0 };
+}
+
+function saveLoginState(email, value) {
+  const state = storage.getJson(LOGIN_ATTEMPTS_KEY, {});
+  state[normalizeEmail(email)] = value;
+  storage.setJson(LOGIN_ATTEMPTS_KEY, state);
+}
+
+function getLoginLock(email) {
+  const locks = storage.getJson(LOGIN_LOCK_UNTIL_KEY, {});
+  return Number(locks[normalizeEmail(email)] || 0);
+}
+
+function setLoginLock(email, until) {
+  const locks = storage.getJson(LOGIN_LOCK_UNTIL_KEY, {});
+  locks[normalizeEmail(email)] = until;
+  storage.setJson(LOGIN_LOCK_UNTIL_KEY, locks);
+}
+
+function clearLoginState(email) {
+  const normalized = normalizeEmail(email);
+  const state = storage.getJson(LOGIN_ATTEMPTS_KEY, {});
+  const locks = storage.getJson(LOGIN_LOCK_UNTIL_KEY, {});
+  delete state[normalized];
+  delete locks[normalized];
+  storage.setJson(LOGIN_ATTEMPTS_KEY, state);
+  storage.setJson(LOGIN_LOCK_UNTIL_KEY, locks);
+}
+
+export function friendlyAuthError(error) {
+  const message = error?.message || '';
+  if (/email not confirmed/i.test(message)) return 'Debes confirmar tu correo antes de ingresar.';
+  if (/rate limit|too many|429/i.test(message)) return 'Demasiados intentos. Espera unos minutos antes de volver a intentar.';
+  if (/invalid login credentials|invalid credentials/i.test(message)) return 'Credenciales incorrectas.';
+  if (/network|fetch/i.test(message)) return 'No se pudo conectar. Revisa tu conexión a internet.';
+  return message || 'No se pudo completar la autenticación.';
+}
 
 export async function signInWithPassword({ supabase, email, password, remember }) {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return { error };
+  const lockedUntil = getLoginLock(email);
+  if (lockedUntil && Date.now() < lockedUntil) {
+    const minutes = Math.ceil((lockedUntil - Date.now()) / 60000);
+    return { error: { message: `Demasiados intentos fallidos. Intenta nuevamente en ${minutes} min.` } };
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({ email: normalizeEmail(email), password });
+  if (error) {
+    const current = getLoginState(email);
+    const nextCount = current.count + 1;
+    saveLoginState(email, { count: nextCount, lastAttemptAt: Date.now() });
+    if (nextCount >= LOGIN_MAX_ATTEMPTS) {
+      const until = Date.now() + LOGIN_LOCK_MS;
+      setLoginLock(email, until);
+      return { error: { message: 'Demasiados intentos fallidos. Login bloqueado por 5 minutos.' } };
+    }
+    return { error: { message: `${friendlyAuthError(error)} Intentos restantes: ${LOGIN_MAX_ATTEMPTS - nextCount}.` } };
+  }
+  clearLoginState(email);
 
   if (remember) {
-    localStorage.setItem(REMEMBER_KEY, '1');
-    localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
-    localStorage.removeItem(LOCKED_KEY);
+    storage.setRaw(REMEMBER_KEY, '1');
+    storage.setRaw(REMEMBER_EMAIL_KEY, normalizeEmail(email));
+    storage.remove(LOCKED_KEY);
   } else {
     clearRememberedAccount();
   }
@@ -17,15 +85,22 @@ export async function signInWithPassword({ supabase, email, password, remember }
 
 export async function signUpUser({ supabase, email, password, nombre, apellido }) {
   const { error } = await supabase.auth.signUp({
-    email,
+    email: normalizeEmail(email),
     password,
     options: { data: { nombre, apellido }, emailRedirectTo: window.location.origin },
   });
   return { error };
 }
 
+export async function sendPasswordReset({ supabase, email }) {
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
+    redirectTo: window.location.origin,
+  });
+  return { error };
+}
+
 export function clearRememberedAccount() {
-  localStorage.removeItem(REMEMBER_KEY);
-  localStorage.removeItem(REMEMBER_EMAIL_KEY);
-  localStorage.removeItem(LOCKED_KEY);
+  storage.remove(REMEMBER_KEY);
+  storage.remove(REMEMBER_EMAIL_KEY);
+  storage.remove(LOCKED_KEY);
 }

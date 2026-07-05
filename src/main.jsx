@@ -15,6 +15,9 @@ import {
   FileDown,
   LayoutDashboard,
   LogOut,
+  Bell,
+  Menu,
+  Download,
   Pencil,
   Plus,
   RefreshCw,
@@ -31,16 +34,20 @@ import {
 } from 'lucide-react';
 import { createStoredClient, createSupabaseClient } from './config/supabase';
 import { LOCKED_KEY, REMEMBER_EMAIL_KEY, REMEMBER_KEY } from './constants/authStorage';
-import { clearRememberedAccount, signInWithPassword, signUpUser } from './controllers/auth.controller';
+import { clearRememberedAccount, friendlyAuthError, sendPasswordReset, signInWithPassword, signUpUser } from './controllers/auth.controller';
 import { updateMobilePin, updateProfile } from './controllers/profile.controller';
 import { AppDialogs, AuthCard, Field, Modal, RowActions, SelectField, TableSection } from './components/ui';
 import { clearFeedbackHandlers, confirmAction, hideBusy, notify, setFeedbackHandlers, showBusy } from './services/feedback';
+import { storage } from './services/storage.service';
 import { calcEstado, dateFmt, money, month, today } from './utils/format';
+import { getPasswordStrength, validatePassword } from './utils/password';
 import { hashPin, isMobileViewport } from './utils/security';
 import './styles.css';
 
 const LAST_PAGE_KEY = 'fintrack_last_page';
 const COMPANY_CONFIG_KEY = 'fintrack_company_config';
+const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
+const INACTIVITY_WARNING_MS = 60 * 1000;
 const PAGE_IDS = [
   'dashboard',
   'clientes',
@@ -68,6 +75,8 @@ const DEFAULT_COMPANY_CONFIG = {
   direccion: '',
   telefono: '',
   logo_url: '',
+  primary_color: '#1d9e75',
+  theme: 'light',
 };
 const MODULE_PERMISSIONS = [
   ['dashboard', 'Dashboard'],
@@ -96,10 +105,16 @@ const PERMISSION_FIELDS = [
 
 function getCompanyConfig() {
   try {
-    return { ...DEFAULT_COMPANY_CONFIG, ...(JSON.parse(localStorage.getItem(COMPANY_CONFIG_KEY) || '{}') || {}) };
+    return { ...DEFAULT_COMPANY_CONFIG, ...(storage.getJson(COMPANY_CONFIG_KEY, {}) || {}) };
   } catch {
     return DEFAULT_COMPANY_CONFIG;
   }
+}
+
+function applyVisualConfig(config = getCompanyConfig()) {
+  const root = document.documentElement;
+  root.dataset.theme = config.theme === 'dark' ? 'dark' : 'light';
+  root.style.setProperty('--primary', config.primary_color || DEFAULT_COMPANY_CONFIG.primary_color);
 }
 
 function App() {
@@ -107,7 +122,7 @@ function App() {
   const [session, setSession] = React.useState(null);
   const [profile, setProfile] = React.useState(null);
   const [page, setPage] = React.useState(() => {
-    const savedPage = localStorage.getItem(LAST_PAGE_KEY);
+    const savedPage = storage.getRaw(LAST_PAGE_KEY);
     return PAGE_IDS.includes(savedPage) ? savedPage : 'dashboard';
   });
   const [message, setMessage] = React.useState('');
@@ -116,11 +131,14 @@ function App() {
   const [confirmState, setConfirmState] = React.useState(null);
   const [busy, setBusy] = React.useState({ active: false, message: '' });
   const [installPrompt, setInstallPrompt] = React.useState(null);
-  const [locked, setLocked] = React.useState(() => localStorage.getItem(LOCKED_KEY) === '1');
-  const [sidebarHidden, setSidebarHidden] = React.useState(() => localStorage.getItem('fintrack_sidebar_hidden') === '1');
+  const [locked, setLocked] = React.useState(() => storage.getRaw(LOCKED_KEY) === '1');
+  const [sidebarHidden, setSidebarHidden] = React.useState(() => storage.getRaw('fintrack_sidebar_hidden') === '1');
   const [updateWaiting, setUpdateWaiting] = React.useState(null);
   const [alertsOpen, setAlertsOpen] = React.useState(false);
   const [permissions, setPermissions] = React.useState({});
+  const [isMobile, setIsMobile] = React.useState(() => isMobileViewport());
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [offline, setOffline] = React.useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
 
   React.useEffect(() => {
     setFeedbackHandlers({
@@ -133,6 +151,13 @@ function App() {
       onBusy: setBusy,
     });
     return clearFeedbackHandlers;
+  }, []);
+
+  React.useEffect(() => {
+    const syncVisualConfig = () => applyVisualConfig();
+    syncVisualConfig();
+    window.addEventListener('fintrack_visual_config', syncVisualConfig);
+    return () => window.removeEventListener('fintrack_visual_config', syncVisualConfig);
   }, []);
 
   React.useEffect(() => {
@@ -161,9 +186,34 @@ function App() {
   }, []);
 
   React.useEffect(() => {
+    const syncViewport = () => setIsMobile(isMobileViewport());
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    return () => window.removeEventListener('resize', syncViewport);
+  }, []);
+
+  React.useEffect(() => {
+    const goOnline = () => setOffline(false);
+    const goOffline = () => setOffline(true);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
+  React.useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => setSession(data.session || null));
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      if (event === 'PASSWORD_RECOVERY') {
+        setPage('perfil');
+        storage.setRaw(LAST_PAGE_KEY, 'perfil');
+        setMessage('Recuperación validada. Ingresa tu nueva contraseña en la sección Contraseña.');
+      }
+    });
     return () => data.subscription.unsubscribe();
   }, [supabase]);
 
@@ -190,10 +240,36 @@ function App() {
 
   React.useEffect(() => {
     if (locked && profile && !profile.pin_hash) {
-      localStorage.removeItem(LOCKED_KEY);
+      storage.remove(LOCKED_KEY);
       setLocked(false);
     }
   }, [locked, profile]);
+
+  React.useEffect(() => {
+    if (!supabase || !session?.user || locked) return undefined;
+    let logoutTimer;
+    let warningTimer;
+    const resetTimers = () => {
+      window.clearTimeout(logoutTimer);
+      window.clearTimeout(warningTimer);
+      warningTimer = window.setTimeout(() => notify('Tu sesión se cerrará en 1 minuto por inactividad.', 'warning'), INACTIVITY_TIMEOUT_MS - INACTIVITY_WARNING_MS);
+      logoutTimer = window.setTimeout(async () => {
+        await supabase.auth.signOut();
+        storage.remove(LOCKED_KEY);
+        setSession(null);
+        setProfile(null);
+        notify('Sesión cerrada por inactividad.', 'success');
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    resetTimers();
+    events.forEach((eventName) => window.addEventListener(eventName, resetTimers, { passive: true }));
+    return () => {
+      window.clearTimeout(logoutTimer);
+      window.clearTimeout(warningTimer);
+      events.forEach((eventName) => window.removeEventListener(eventName, resetTimers));
+    };
+  }, [supabase, session?.user, locked]);
 
   React.useEffect(() => {
     if (!profile) return;
@@ -201,10 +277,10 @@ function App() {
     const adminOnly = ['config', 'usuarios-admin'];
     if (!PAGE_IDS.includes(page) || (adminOnly.includes(page) && !isAdminProfile)) {
       setPage('dashboard');
-      localStorage.setItem(LAST_PAGE_KEY, 'dashboard');
+      storage.setRaw(LAST_PAGE_KEY, 'dashboard');
       return;
     }
-    localStorage.setItem(LAST_PAGE_KEY, page);
+    storage.setRaw(LAST_PAGE_KEY, page);
   }, [page, profile]);
 
   React.useEffect(() => {
@@ -229,7 +305,7 @@ function App() {
   if (locked && !profile) return <><AuthCard title="Desbloquear FinTrack"><p className="muted">Cargando cuenta recordada...</p></AuthCard><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (locked && profile?.pin_hash) {
     return <><PinUnlock supabase={supabase} profile={profile} onUnlock={() => {
-      localStorage.removeItem(LOCKED_KEY);
+      storage.remove(LOCKED_KEY);
       setLocked(false);
     }} onFullLogout={async () => {
       clearRememberedAccount();
@@ -278,14 +354,14 @@ function App() {
   ];
 
   async function logout() {
-    const canLock = isMobileViewport() && localStorage.getItem(REMEMBER_KEY) === '1' && profile?.pin_hash;
+    const canLock = isMobileViewport() && storage.getRaw(REMEMBER_KEY) === '1' && profile?.pin_hash;
     if (canLock) {
-      localStorage.setItem(LOCKED_KEY, '1');
+      storage.setRaw(LOCKED_KEY, '1');
       setLocked(true);
       return;
     }
     await supabase.auth.signOut();
-    localStorage.removeItem(LOCKED_KEY);
+    storage.remove(LOCKED_KEY);
     setSession(null);
     setProfile(null);
   }
@@ -294,6 +370,12 @@ function App() {
     if ((nextPage === 'config' || nextPage === 'usuarios-admin') && !isAdmin) return;
     if (!can(nextPage, 'view')) return notify('No tienes permiso para ver este módulo.');
     setPage(nextPage);
+    setSidebarOpen(false);
+  }
+
+  function toggleMobileSidebar() {
+    setAlertsOpen(false);
+    setSidebarOpen((current) => !current);
   }
 
   function toggleSidebar() {
@@ -310,9 +392,13 @@ function App() {
     window.location.reload();
   }
 
+  const currentTitle = pageTitle(page, isAdmin);
+
   return (
-    <div className={`layout ${sidebarHidden ? 'sidebar-hidden' : ''}`}>
-      <aside className="sidebar">
+    <div className={`layout ${sidebarHidden ? 'sidebar-hidden' : ''} ${isMobile ? 'layout-mobile' : ''} ${sidebarOpen ? 'sidebar-open' : ''}`}>
+      <div className={`offline-indicator ${offline ? 'visible' : ''}`}>Sin conexión. Algunas funciones pueden no estar disponibles.</div>
+      {isMobile && <button className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`} type="button" aria-label="Cerrar menú" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-logo">
           <div className="brand">
             <div className="brand-icon"><AppLogoIcon /></div>
@@ -336,7 +422,7 @@ function App() {
           <button className="nav-item logout" onClick={logout}><LogOut size={18} /> Cerrar sesión</button>
         </nav>
         <div className="sidebar-footer">
-          <div className="user-mini" onClick={() => setPage('perfil')}>
+          <div className="user-mini" onClick={() => openPage('perfil')}>
             <div className="user-avatar">{initials(profile, session.user.email)}</div>
             <div className="user-info">
               <div className="name">{fullName(profile) || session.user.email}</div>
@@ -347,27 +433,54 @@ function App() {
       </aside>
       <main className="main">
         <div className="topbar">
-          <div className="topbar-left">
-            <button className="btn btn-icon sidebar-toggle" type="button" onClick={toggleSidebar} title={sidebarHidden ? 'Mostrar menú' : 'Ocultar menú'}>
-              <SidebarPanelIcon collapsed={sidebarHidden} size={30} />
-            </button>
-            <div>
-              <h2>{pageTitle(page, isAdmin)[0]}</h2>
-              <p>{pageTitle(page, isAdmin)[1]}</p>
+          {isMobile ? (
+            <>
+            <div className="topbar-left">
+              <button className="btn btn-icon mobile-menu-button" type="button" onClick={toggleMobileSidebar} title="Menú" aria-label="Abrir menú">
+                <Menu size={24} />
+              </button>
+              <div>
+                <h2>{currentTitle[0]}</h2>
+                <p>{currentTitle[1]}</p>
+              </div>
             </div>
-          </div>
-          <div className="topbar-actions">
-            <GlobalSearch supabase={supabase} user={session.user} onOpenPage={openPage} />
-            <AlertsButton supabase={supabase} user={session.user} open={alertsOpen} setOpen={setAlertsOpen} onOpenPage={openPage} />
-            {updateWaiting && <button className="btn" type="button" onClick={applyUpdate}><RefreshCw size={16} />Actualizar app</button>}
-            {installPrompt && <button className="btn btn-primary" onClick={async () => {
-              await installPrompt.prompt();
-              setInstallPrompt(null);
-            }}>Instalar app</button>}
-            <button className="btn mobile-logout-btn" onClick={logout}>
-              <LogOut size={16} /> Salir
-            </button>
-          </div>
+            <div className="topbar-mobile-actions">
+              <AlertsButton supabase={supabase} user={session.user} open={alertsOpen} setOpen={setAlertsOpen} onOpenPage={openPage} />
+              {updateWaiting && <button className="btn btn-icon" type="button" onClick={applyUpdate} title="Actualizar app" aria-label="Actualizar app"><RefreshCw size={18} /></button>}
+              {installPrompt && <button className="btn btn-icon btn-primary" type="button" title="Instalar app" aria-label="Instalar app" onClick={async () => {
+                await installPrompt.prompt();
+                setInstallPrompt(null);
+              }}><Download size={18} /></button>}
+              <button className="btn btn-icon mobile-logout-btn" onClick={logout} title="Salir" aria-label="Salir">
+                <LogOut size={18} />
+              </button>
+            </div>
+            <div className="topbar-mobile-search">
+              <GlobalSearch supabase={supabase} user={session.user} onOpenPage={openPage} />
+            </div>
+            </>
+          ) : (
+            <>
+            <div className="topbar-left">
+              <button className="btn btn-icon sidebar-toggle" type="button" onClick={toggleSidebar} title={sidebarHidden ? 'Mostrar menú' : 'Ocultar menú'}>
+                <Menu size={24} />
+              </button>
+              <div>
+                <h2>{currentTitle[0]}</h2>
+                <p>{currentTitle[1]}</p>
+              </div>
+            </div>
+            <div className="topbar-actions">
+              <GlobalSearch supabase={supabase} user={session.user} onOpenPage={openPage} />
+              <AlertsButton supabase={supabase} user={session.user} open={alertsOpen} setOpen={setAlertsOpen} onOpenPage={openPage} />
+              {updateWaiting && <button className="btn" type="button" onClick={applyUpdate}><RefreshCw size={16} />Actualizar app</button>}
+              {installPrompt && <button className="btn btn-primary" onClick={async () => {
+                await installPrompt.prompt();
+                setInstallPrompt(null);
+              }}><Download size={16} />Instalar app</button>}
+            </div>
+            </>
+          )}
         </div>
         {message && <div className="alert alert-danger">{message}</div>}
         <div className={`page active page-${page}`}>
@@ -394,6 +507,15 @@ function App() {
       <AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} />
     </div>
   );
+}
+
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = React.useState(value);
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedValue(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
 }
 
 function initials(profile, email) {
@@ -451,6 +573,11 @@ function parseCsv(text) {
 }
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+}
+function shortJson(value) {
+  if (!value) return '-';
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  return text.length > 90 ? `${text.slice(0, 90)}...` : text;
 }
 async function logAudit(supabase, userId, tabla, accion, descripcion, registro_id = null, datos = null) {
   const { error } = await supabase.rpc('registrar_auditoria_avanzada', {
@@ -516,42 +643,15 @@ function AppLogoIcon({ size = 22 }) {
   );
 }
 
-function SidebarPanelIcon({ collapsed = false, size = 30 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="2.5" y="4.25" width="19" height="15.5" rx="4" stroke="currentColor" strokeWidth="2.35" />
-      <path d="M8.25 5.1v13.8" stroke="currentColor" strokeWidth="2.35" strokeLinecap="round" />
-      <path
-        d={collapsed ? 'M12.4 8.2 16.4 12l-4 3.8' : 'M16 8.2 12 12l4 3.8'}
-        stroke="currentColor"
-        strokeWidth="2.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function SolidBellIcon({ size = 28 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M12 2.75A6.75 6.75 0 0 0 5.25 9.5v3.35c0 1.35-.48 2.66-1.36 3.69A2.65 2.65 0 0 0 5.9 20.9h12.2a2.65 2.65 0 0 0 2.01-4.36 5.67 5.67 0 0 1-1.36-3.69V9.5A6.75 6.75 0 0 0 12 2.75Z"
-      />
-      <path fill="currentColor" d="M9.2 21.55a3.05 3.05 0 0 0 5.6 0H9.2Z" />
-    </svg>
-  );
-}
-
 function GlobalSearch({ supabase, user, onOpenPage }) {
   const [query, setQuery] = React.useState('');
+  const debouncedQuery = useDebounce(query, 300);
   const [results, setResults] = React.useState([]);
   const [open, setOpen] = React.useState(false);
   React.useEffect(() => {
     let cancelled = false;
     async function search() {
-      const term = query.trim().replace(/[,%()]/g, ' ');
+      const term = debouncedQuery.trim().replace(/[,%()]/g, ' ');
       if (term.length < 2) {
         setResults([]);
         return;
@@ -573,12 +673,12 @@ function GlobalSearch({ supabase, user, onOpenPage }) {
         ...(movimientos.data || []).map((r) => ({ page: 'movimientos', title: r.descripcion || r.categoria || 'Movimiento', meta: r.tipo, type: 'Movimiento' })),
       ].slice(0, 8));
     }
-    const timer = window.setTimeout(search, 250);
+    const timer = window.setTimeout(search, 80);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, supabase, user.id]);
+  }, [debouncedQuery, supabase, user.id]);
   function selectResult(result) {
     onOpenPage(result.page);
     setQuery('');
@@ -607,11 +707,13 @@ function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
   const [alerts, setAlerts] = React.useState([]);
   React.useEffect(() => {
     async function load() {
-      const [deudas, presupuestos, movimientos, metas] = await Promise.all([
+      const [deudas, presupuestos, movimientos, metas, cuentas, prestamosRecibidos] = await Promise.all([
         supabase.from('deudas').select('id,descripcion,fecha_vencimiento,monto_total,monto_pagado,tipo,clientes(nombre,apellido)').eq('admin_id', user.id),
         supabase.from('presupuestos').select('id,categoria,tipo,monto_limite,tipo_movimiento_id,tipos_movimiento(nombre)').eq('admin_id', user.id).eq('mes', month()),
         supabase.from('movimientos').select('id,tipo,categoria,tipo_movimiento_id,monto,fecha').eq('admin_id', user.id).gte('fecha', `${month()}-01`).lte('fecha', today()),
         supabase.from('metas').select('id,nombre,monto_objetivo,monto_actual,fecha_objetivo,estado').eq('admin_id', user.id).eq('estado', 'activa'),
+        supabase.from('cuentas').select('id,banco,tipo,saldo,moneda').eq('admin_id', user.id),
+        supabase.from('prestamos_recibidos').select('id,acreedor,descripcion,monto_original,saldo_inicial,monto_pagado,fecha_vencimiento').eq('admin_id', user.id),
       ]);
       const debtAlerts = (deudas.data || [])
         .filter((d) => calcEstado(d) === 'vencido' || calcEstado(d) === 'por_vencer')
@@ -633,14 +735,22 @@ function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
         .filter((m) => m.fecha_objetivo && m.fecha_objetivo <= today())
         .slice(0, 3)
         .map((m) => ({ page: 'metas', level: 'warning', title: 'Meta por revisar', text: `${m.nombre}: ${money(m.monto_actual)} / ${money(m.monto_objetivo)}` }));
-      setAlerts([...debtAlerts, ...budgetAlerts, ...goalAlerts]);
+      const lowBalanceAlerts = (cuentas.data || [])
+        .filter((c) => Number(c.saldo || 0) <= 0)
+        .slice(0, 3)
+        .map((c) => ({ page: 'cuentas', level: 'warning', title: 'Saldo bajo', text: `${c.banco || 'Cuenta'} ${c.tipo || ''}: ${money(c.saldo || 0)}` }));
+      const receivedLoanAlerts = (prestamosRecibidos.data || [])
+        .filter((p) => p.fecha_vencimiento && (calcEstado({ fecha_vencimiento: p.fecha_vencimiento, monto_total: p.saldo_inicial || p.monto_original, monto_pagado: p.monto_pagado }) !== 'al_dia'))
+        .slice(0, 4)
+        .map((p) => ({ page: 'prestamos-recibidos', level: 'warning', title: 'Préstamo recibido por pagar', text: `${p.acreedor || p.descripcion || 'Acreedor'}: ${money(Number(p.saldo_inicial || p.monto_original || 0) - Number(p.monto_pagado || 0))}` }));
+      setAlerts([...debtAlerts, ...budgetAlerts, ...goalAlerts, ...lowBalanceAlerts, ...receivedLoanAlerts]);
     }
     load();
   }, [supabase, user.id]);
   return (
     <div className="alerts-menu">
-      <button className="btn btn-icon alerts-button" type="button" onClick={() => setOpen(!open)} title="Alertas">
-        <SolidBellIcon size={28} />
+      <button className={`btn btn-icon alerts-button ${alerts.length ? 'has-new' : ''}`} type="button" onClick={() => setOpen(!open)} title="Alertas" aria-label={`Alertas${alerts.length ? `: ${alerts.length}` : ''}`}>
+        <Bell size={24} className={alerts.length ? 'bell-icon-animated' : ''} />
         {!!alerts.length && <span className="alerts-count">{alerts.length}</span>}
       </button>
       {open && (
@@ -664,10 +774,11 @@ function Setup({ onReady }) {
 
 function Auth({ supabase, message, setMessage }) {
   const [mode, setMode] = React.useState('login');
-  const [form, setForm] = React.useState({ nombre: '', apellido: '', email: localStorage.getItem(REMEMBER_EMAIL_KEY) || '', password: '' });
+  const [form, setForm] = React.useState({ nombre: '', apellido: '', email: storage.getRaw(REMEMBER_EMAIL_KEY), password: '' });
   const [showPassword, setShowPassword] = React.useState(false);
-  const [remember, setRemember] = React.useState(localStorage.getItem(REMEMBER_KEY) === '1');
+  const [remember, setRemember] = React.useState(storage.getRaw(REMEMBER_KEY) === '1');
   const [loading, setLoading] = React.useState(false);
+  const passwordStrength = getPasswordStrength(form.password, form.email);
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
   async function submit(event) {
@@ -675,6 +786,19 @@ function Auth({ supabase, message, setMessage }) {
     setMessage('');
     setLoading(true);
     try {
+      if (mode === 'reset') {
+        if (!form.email.trim()) {
+          setMessage('Ingresa tu correo para enviar el enlace de recuperación.');
+          return;
+        }
+        const { error } = await sendPasswordReset({ supabase, email: form.email });
+        if (error) {
+          setMessage(friendlyAuthError(error));
+        } else {
+          setMessage('Te enviamos un enlace para recuperar tu contraseña. Revisa bandeja de entrada y spam.');
+        }
+        return;
+      }
       if (mode === 'login') {
         const { error } = await signInWithPassword({
           supabase,
@@ -682,7 +806,12 @@ function Auth({ supabase, message, setMessage }) {
           password: form.password,
           remember,
         });
-        if (error) setMessage(error.message);
+        if (error) setMessage(friendlyAuthError(error));
+        return;
+      }
+      const passwordError = validatePassword(form.password, form.email);
+      if (passwordError) {
+        setMessage(passwordError);
         return;
       }
       const { error } = await signUpUser({
@@ -694,7 +823,7 @@ function Auth({ supabase, message, setMessage }) {
       });
       if (error) {
         const rateLimited = error.status === 429 || /rate limit|email rate/i.test(error.message);
-        setMessage(rateLimited ? 'Supabase alcanzó el límite temporal de correos. Espera o configura SMTP propio.' : error.message);
+        setMessage(rateLimited ? 'Supabase alcanzó el límite temporal de correos. Espera o configura SMTP propio.' : friendlyAuthError(error));
       } else {
         setMessage('Correo de confirmación enviado. Revisa bandeja de entrada y spam.');
       }
@@ -707,35 +836,64 @@ function Auth({ supabase, message, setMessage }) {
 
   return (
     <AuthCard title="FinTrack Pro">
-      <div className="auth-tabs">
-        <button className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => setMode('login')}>Iniciar sesión</button>
-        <button className={`auth-tab ${mode === 'register' ? 'active' : ''}`} onClick={() => setMode('register')}>Registrarse</button>
-      </div>
+      {mode !== 'reset' ? (
+        <div className="auth-tabs">
+          <button type="button" className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => setMode('login')}>Iniciar sesión</button>
+          <button type="button" className={`auth-tab ${mode === 'register' ? 'active' : ''}`} onClick={() => setMode('register')}>Registrarse</button>
+        </div>
+      ) : (
+        <div className="auth-reset-title">
+          <strong>Recuperar contraseña</strong>
+          <span>Te enviaremos un enlace seguro a tu correo.</span>
+        </div>
+      )}
       <form onSubmit={submit}>
         {mode === 'register' && (
           <div className="form-row">
-            <Field label="Nombre" value={form.nombre} onChange={(value) => setField('nombre', value)} />
-            <Field label="Apellido" value={form.apellido} onChange={(value) => setField('apellido', value)} />
+            <Field label="Nombre" value={form.nombre} onChange={(value) => setField('nombre', value)} maxLength={80} />
+            <Field label="Apellido" value={form.apellido} onChange={(value) => setField('apellido', value)} maxLength={80} />
           </div>
         )}
-        <Field label="Correo electrónico" type="email" value={form.email} onChange={(value) => setField('email', value)} required />
-        <Field
-          label="Contraseña"
-          type={showPassword ? 'text' : 'password'}
-          value={form.password}
-          onChange={(value) => setField('password', value)}
-          required
-          minLength={8}
-          rightElement={<button className="input-action" type="button" onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
-        />
+        <Field label="Correo electrónico" type="email" value={form.email} onChange={(value) => setField('email', value)} required maxLength={254} autoComplete="email" />
+        {mode !== 'reset' && (
+          <Field
+            label="Contraseña"
+            type={showPassword ? 'text' : 'password'}
+            value={form.password}
+            onChange={(value) => setField('password', value)}
+            required
+            minLength={8}
+            maxLength={128}
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            rightElement={<button className="input-action" type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
+          />
+        )}
+        {mode === 'register' && (
+          <div className={`password-strength password-strength-${passwordStrength.label.toLowerCase()}`}>
+            <div className="password-strength-head">
+              <span>Seguridad de contraseña</span>
+              <strong>{passwordStrength.label}</strong>
+            </div>
+            <div className="password-strength-track"><i style={{ width: `${passwordStrength.score}%` }} /></div>
+            <div className="password-checks">
+              {passwordStrength.checks.map(([key, label, ok]) => (
+                <span key={key} className={ok ? 'ok' : ''}>{ok ? '✓' : '•'} {label}</span>
+              ))}
+            </div>
+          </div>
+        )}
         {mode === 'login' && (
           <label className="check-row">
             <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
             <span>Recordar cuenta y usar PIN en este celular</span>
           </label>
         )}
-        <button className="btn-full" disabled={loading}>{loading ? (mode === 'login' ? 'Ingresando...' : 'Creando cuenta...') : (mode === 'login' ? 'Entrar al sistema' : 'Crear cuenta de cliente')}</button>
+        <button className="btn-full" disabled={loading}>
+          {loading ? (mode === 'login' ? 'Ingresando...' : mode === 'reset' ? 'Enviando enlace...' : 'Creando cuenta...') : (mode === 'login' ? 'Entrar al sistema' : mode === 'reset' ? 'Enviar enlace' : 'Crear cuenta de cliente')}
+        </button>
         {message && <div className="auth-error">{message}</div>}
+        {mode === 'login' && <button type="button" className="link-button" onClick={() => { setMessage(''); setMode('reset'); }}>Olvidé mi contraseña</button>}
+        {mode === 'reset' && <button type="button" className="link-button" onClick={() => { setMessage(''); setMode('login'); }}>Volver al inicio de sesión</button>}
       </form>
     </AuthCard>
   );
@@ -745,7 +903,7 @@ function PinUnlock({ profile, onUnlock, onFullLogout }) {
   const [pin, setPin] = React.useState('');
   const [error, setError] = React.useState('');
   const [attempts, setAttempts] = React.useState(0);
-  const [lockedUntil, setLockedUntil] = React.useState(() => Number(localStorage.getItem('fintrack_pin_locked_until') || 0));
+  const [lockedUntil, setLockedUntil] = React.useState(() => Number(storage.getRaw('fintrack_pin_locked_until', '0') || 0));
 
   async function submit(event) {
     event.preventDefault();
@@ -764,7 +922,7 @@ function PinUnlock({ profile, onUnlock, onFullLogout }) {
       setAttempts(nextAttempts);
       if (nextAttempts >= 5) {
         const until = Date.now() + 5 * 60 * 1000;
-        localStorage.setItem('fintrack_pin_locked_until', String(until));
+        storage.setRaw('fintrack_pin_locked_until', String(until));
         setLockedUntil(until);
         setAttempts(0);
         setError('Demasiados intentos fallidos. PIN bloqueado por 5 minutos.');
@@ -774,7 +932,7 @@ function PinUnlock({ profile, onUnlock, onFullLogout }) {
       setPin('');
       return;
     }
-    localStorage.removeItem('fintrack_pin_locked_until');
+    storage.remove('fintrack_pin_locked_until');
     onUnlock();
   }
 
@@ -827,9 +985,12 @@ function Config({ onReady, compact = false }) {
           direccion: data.direccion || '',
           telefono: data.telefono || '',
           logo_url: data.logo_url || '',
+          primary_color: data.primary_color || DEFAULT_COMPANY_CONFIG.primary_color,
+          theme: data.theme || DEFAULT_COMPANY_CONFIG.theme,
         };
         setCompany(next);
         localStorage.setItem(COMPANY_CONFIG_KEY, JSON.stringify(next));
+        applyVisualConfig(next);
       }
     });
   }, [compact]);
@@ -860,6 +1021,8 @@ function Config({ onReady, compact = false }) {
   async function saveCompany(event) {
     event.preventDefault();
     localStorage.setItem(COMPANY_CONFIG_KEY, JSON.stringify(company));
+    applyVisualConfig(company);
+    window.dispatchEvent(new Event('fintrack_visual_config'));
     const client = createStoredClient();
     if (client) {
       const { data: sessionData } = await client.auth.getSession();
@@ -913,6 +1076,13 @@ function Config({ onReady, compact = false }) {
               <Field label="Dirección" value={company.direccion} onChange={(v) => setCompany({ ...company, direccion: v })} />
               <Field label="Teléfono" value={company.telefono} onChange={(v) => setCompany({ ...company, telefono: v })} />
               <Field label="URL del logo" value={company.logo_url} onChange={(v) => setCompany({ ...company, logo_url: v })} placeholder="https://..." />
+              <div className="form-row">
+                <SelectField label="Tema visual" value={company.theme || 'light'} onChange={(v) => setCompany({ ...company, theme: v })}>
+                  <option value="light">Claro</option>
+                  <option value="dark">Oscuro</option>
+                </SelectField>
+                <Field label="Color principal" type="color" value={company.primary_color || DEFAULT_COMPANY_CONFIG.primary_color} onChange={(v) => setCompany({ ...company, primary_color: v })} />
+              </div>
               <input ref={logoInputRef} type="file" accept="image/*" hidden onChange={uploadLogo} />
               <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Subir logo</button>
               <button className="btn btn-primary"><Check size={16} />Guardar datos de empresa</button>
@@ -926,10 +1096,10 @@ function Config({ onReady, compact = false }) {
 
 const DASHBOARD_CARDS_KEY = 'fintrack_dashboard_cards';
 const DASHBOARD_CARD_OPTIONS = [
-  { id: 'balance', label: 'Balance de cuentas' },
-  { id: 'pendiente', label: 'Pendiente por cobrar' },
-  { id: 'pagos', label: 'Cobros del mes' },
-  { id: 'movimientos', label: 'Ingresos / Egresos' },
+  { id: 'balance', label: 'Balance de cuentas', description: 'Saldo total y distribución por cuenta.', Icon: Wallet },
+  { id: 'pendiente', label: 'Pendiente por cobrar', description: 'Deudas activas y monto pendiente.', Icon: CreditCard },
+  { id: 'pagos', label: 'Cobros del mes', description: 'Cobros registrados durante el mes actual.', Icon: Banknote },
+  { id: 'movimientos', label: 'Ingresos / Egresos', description: 'Resumen general de movimientos.', Icon: TrendingUp },
 ];
 const DEFAULT_DASHBOARD_CARDS = DASHBOARD_CARD_OPTIONS.map((item) => item.id);
 
@@ -1047,14 +1217,28 @@ function Dashboard({ supabase, user, isAdmin }) {
       </div>
       <Modal open={configOpen} title="Configurar dashboard" onClose={closeDashboardConfig}>
         <div className="modal-body">
-          <p className="muted modal-intro">Elige qué tarjetas principales quieres ver al entrar al sistema.</p>
-          <div className="dashboard-options">
-            {DASHBOARD_CARD_OPTIONS.map((card) => (
-              <label key={card.id} className="check-row">
-                <input type="checkbox" checked={draftCards.includes(card.id)} onChange={() => toggleDraftCard(card.id)} />
-                <span>{card.label}</span>
-              </label>
-            ))}
+          <div className="dashboard-config-hero">
+            <div>
+              <strong>Personaliza tu resumen</strong>
+              <p>Activa solo las tarjetas que necesitas ver al iniciar sesión.</p>
+            </div>
+            <span>{draftCards.length}/{DASHBOARD_CARD_OPTIONS.length} activas</span>
+          </div>
+          <div className="dashboard-options-grid">
+            {DASHBOARD_CARD_OPTIONS.map((card) => {
+              const active = draftCards.includes(card.id);
+              const Icon = card.Icon;
+              return (
+                <button key={card.id} type="button" className={`dashboard-option-card ${active ? 'active' : ''}`} onClick={() => toggleDraftCard(card.id)}>
+                  <span className="dashboard-option-icon"><Icon size={22} /></span>
+                  <span className="dashboard-option-copy">
+                    <b>{card.label}</b>
+                    <small>{card.description}</small>
+                  </span>
+                  <span className="dashboard-option-check">{active ? <Check size={16} /> : null}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="modal-footer">
@@ -2420,24 +2604,36 @@ function Backup({ supabase, user, can = () => true }) {
       event.target.value = '';
       return;
     }
-    const payload = rows.map((row) => type === 'clientes' ? {
-      admin_id: user.id,
-      nombre: row.nombre || row.name || '',
-      apellido: row.apellido || '',
-      tipo_doc: row.tipo_doc || 'DNI',
-      documento: row.documento || '',
-      telefono: row.telefono || '',
-      email: row.email || '',
-      direccion: row.direccion || '',
-      notas: row.notas || '',
-    } : {
-      admin_id: user.id,
-      fecha: row.fecha || today(),
-      tipo: row.tipo === 'ingreso' ? 'ingreso' : 'egreso',
-      categoria: row.categoria || 'Importado',
-      descripcion: row.descripcion || row.detalle || 'Importado CSV',
-      monto: Number(String(row.monto || '0').replace(',', '.')),
-    }).filter((row) => type === 'clientes' ? row.nombre : row.monto > 0);
+    const errors = [];
+    const payload = rows.map((row, index) => {
+      if (type === 'clientes') {
+        const mapped = {
+          admin_id: user.id,
+          nombre: row.nombre || row.name || '',
+          apellido: row.apellido || '',
+          tipo_doc: row.tipo_doc || 'DNI',
+          documento: row.documento || '',
+          telefono: row.telefono || '',
+          email: row.email || '',
+          direccion: row.direccion || '',
+          notas: row.notas || '',
+        };
+        if (!mapped.nombre) errors.push(`Fila ${index + 2}: falta nombre`);
+        return mapped;
+      }
+      const monto = Number(String(row.monto || '0').replace(',', '.'));
+      const mapped = {
+        admin_id: user.id,
+        fecha: row.fecha || today(),
+        tipo: row.tipo === 'ingreso' ? 'ingreso' : 'egreso',
+        categoria: row.categoria || 'Importado',
+        descripcion: row.descripcion || row.detalle || 'Importado CSV',
+        monto,
+      };
+      if (!mapped.fecha || !/^\d{4}-\d{2}-\d{2}$/.test(mapped.fecha)) errors.push(`Fila ${index + 2}: fecha inválida`);
+      if (!Number.isFinite(monto) || monto <= 0) errors.push(`Fila ${index + 2}: monto inválido`);
+      return mapped;
+    }).filter((row) => type === 'clientes' ? row.nombre : row.monto > 0 && /^\d{4}-\d{2}-\d{2}$/.test(row.fecha));
     if (!payload.length) {
       setStatus('No se encontraron filas válidas para importar.');
       event.target.value = '';
@@ -2445,7 +2641,7 @@ function Backup({ supabase, user, can = () => true }) {
     }
     const { error } = await supabase.from(type === 'clientes' ? 'clientes' : 'movimientos').insert(payload);
     if (error) setStatus(error.message);
-    else setStatus(`${payload.length} registros importados en ${type}.`);
+    else setStatus(`${payload.length} registros importados en ${type}.${errors.length ? ` ${errors.length} filas omitidas: ${errors.slice(0, 3).join('; ')}` : ''}`);
     event.target.value = '';
   }
   return (
@@ -2489,6 +2685,8 @@ function Auditoria({ supabase, user, can = () => true }) {
     accion: row.accion,
     descripcion: row.descripcion,
     registro_id: row.registro_id,
+    datos_antes: shortJson(row.datos_antes || (row.accion === 'delete' ? row.datos : null)),
+    datos_despues: shortJson(row.datos_despues || (row.accion !== 'delete' ? row.datos : null)),
     }))), 'text/csv');
   };
   return (
@@ -2498,7 +2696,7 @@ function Auditoria({ supabase, user, can = () => true }) {
         <SelectField label="Acción" value={action} onChange={setAction}><option value="">Todas</option><option value="insert">Insertar</option><option value="update">Actualizar</option><option value="delete">Eliminar</option></SelectField>
         {can('export') && <button className="btn" type="button" onClick={exportCsv}><FileDown size={16} />Exportar auditoría</button>}
       </div></div>
-      <TableSection title="Auditoría" columns={['Fecha', 'Tabla', 'Acción', 'Descripción']} rows={filtered.map((row) => [new Date(row.created_at).toLocaleString('es-PE'), row.tabla, row.accion, row.descripcion || '-'])} />
+      <TableSection title="Auditoría" columns={['Fecha', 'Tabla', 'Acción', 'Descripción', 'Datos']} rows={filtered.map((row) => [new Date(row.created_at).toLocaleString('es-PE'), row.tabla, row.accion, row.descripcion || '-', <code>{shortJson(row.datos_despues || row.datos_antes || row.datos)}</code>])} />
     </>
   );
 }
@@ -2837,23 +3035,30 @@ function UsuariosAdmin({ supabase, user }) {
           <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />Guardar cambios</button></div>
         </form>
       </Modal>
-      <Modal open={permissionsOpen} title={`Permisos de ${permissionsUser?.nombre || 'usuario'}`} onClose={() => setPermissionsOpen(false)}>
+      <Modal open={permissionsOpen} title={`Permisos de ${permissionsUser?.nombre || 'usuario'}`} onClose={() => setPermissionsOpen(false)} className="permissions-modal">
         <form onSubmit={savePermissions}>
           <div className="modal-body permissions-panel">
-            <p className="permissions-help">Define qué módulos puede ver este usuario y qué acciones puede realizar dentro de cada uno.</p>
+            <div className="permissions-config-hero">
+              <div>
+                <strong>Configura accesos por módulo</strong>
+                <p>Define qué puede ver y qué acciones puede realizar este usuario.</p>
+              </div>
+              <span>{Object.values(permissionRows).reduce((sum, row) => sum + PERMISSION_FIELDS.filter(([field]) => row[field]).length, 0)} permisos activos</span>
+            </div>
+            <div className="permissions-list">
             {MODULE_PERMISSIONS.map(([moduleId, label]) => {
               const row = permissionRows[moduleId] || {};
               const activeCount = PERMISSION_FIELDS.filter(([field]) => row[field]).length;
               return (
-                <div className="permission-card" key={moduleId}>
-                  <div className="permission-card-header">
+                <div className="permission-row-card" key={moduleId}>
+                  <div className="permission-module-info">
                     <div>
                       <strong>{label}</strong>
                       <small>{activeCount} permisos activos</small>
                     </div>
                     <span className={`badge ${row.can_view ? 'badge-green' : 'badge-gray'}`}>{row.can_view ? 'Visible' : 'Oculto'}</span>
                   </div>
-                  <div className="permission-actions">
+                  <div className="permission-toggle-list">
                     {PERMISSION_FIELDS.map(([field, text]) => (
                       <label className={`permission-check ${row[field] ? 'active' : ''}`} key={field}>
                         <input type="checkbox" checked={!!row[field]} onChange={(event) => setPerm(moduleId, field, event.target.checked)} />
@@ -2864,6 +3069,7 @@ function UsuariosAdmin({ supabase, user }) {
                 </div>
               );
             })}
+            </div>
           </div>
           <div className="modal-footer"><button type="button" className="btn" onClick={() => setPermissionsOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />Guardar permisos</button></div>
         </form>
@@ -2880,6 +3086,7 @@ function Perfil({ supabase, user, profile, onSaved }) {
   const [pinStatus, setPinStatus] = React.useState('');
   const [passwordStatus, setPasswordStatus] = React.useState('');
   const [showProfilePassword, setShowProfilePassword] = React.useState(false);
+  const profilePasswordStrength = getPasswordStrength(passwordForm.password, user.email);
   React.useEffect(() => setForm({
     nombre: profile?.nombre || '',
     apellido: profile?.apellido || '',
@@ -2925,8 +3132,9 @@ function Perfil({ supabase, user, profile, onSaved }) {
   async function savePassword(event) {
     event.preventDefault();
     setPasswordStatus('');
-    if (passwordForm.password.length < 8) {
-      setPasswordStatus('La contraseña debe tener mínimo 8 caracteres.');
+    const passwordError = validatePassword(passwordForm.password, user.email);
+    if (passwordError) {
+      setPasswordStatus(passwordError);
       return;
     }
     if (passwordForm.password !== passwordForm.confirm) {
@@ -2989,6 +3197,18 @@ function Perfil({ supabase, user, profile, onSaved }) {
           minLength={8}
           rightElement={<button className="input-action" type="button" onClick={() => setShowProfilePassword((value) => !value)}>{showProfilePassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
         />
+        <div className={`password-strength password-strength-${profilePasswordStrength.label.toLowerCase()}`}>
+          <div className="password-strength-head">
+            <span>Seguridad de contraseña</span>
+            <strong>{profilePasswordStrength.label}</strong>
+          </div>
+          <div className="password-strength-track"><i style={{ width: `${profilePasswordStrength.score}%` }} /></div>
+          <div className="password-checks">
+            {profilePasswordStrength.checks.map(([key, label, ok]) => (
+              <span key={key} className={ok ? 'ok' : ''}>{ok ? '✓' : '•'} {label}</span>
+            ))}
+          </div>
+        </div>
         <Field label="Confirmar contraseña" type={showProfilePassword ? 'text' : 'password'} value={passwordForm.confirm} onChange={(v) => setPasswordForm({ ...passwordForm, confirm: v })} required minLength={8} />
       {passwordStatus && <div className={`connection-status ${passwordStatus.includes('correctamente') ? 'success' : ''}`}>{passwordStatus}</div>}
       <div className="table-actions">
@@ -3007,8 +3227,3 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
-
-
-
-
-

@@ -8,9 +8,15 @@ create table if not exists public.empresa_config (
   direccion text,
   telefono text,
   logo_url text,
+  primary_color text default '#1d9e75',
+  theme text default 'light' check (theme in ('light', 'dark')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.empresa_config
+add column if not exists primary_color text default '#1d9e75',
+add column if not exists theme text default 'light';
 
 alter table public.empresa_config enable row level security;
 grant select, insert, update, delete on public.empresa_config to authenticated;
