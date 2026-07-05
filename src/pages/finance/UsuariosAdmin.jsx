@@ -18,7 +18,7 @@ import {
   deleteAdminUser,
   listAdminUsers,
   listPermissionsForUser,
-  savePermissions,
+  savePermissions as saveUserPermissions,
   updateAdminUser,
   updateAdminUserState,
 } from '../../services/admin.service';
@@ -128,7 +128,7 @@ export function UsuariosAdmin({ supabase, user }) {
   function setPerm(moduleId, field, checked) {
     setPermissionRows((current) => ({ ...current, [moduleId]: { ...current[moduleId], [field]: checked } }));
   }
-  async function savePermissions(event) {
+  async function savePermissionRows(event) {
     event.preventDefault();
     if (!permissionsUser) return;
     const payload = Object.values(permissionRows).map((row) => ({
@@ -142,7 +142,7 @@ export function UsuariosAdmin({ supabase, user }) {
       can_export: !!row.can_export,
       updated_at: new Date().toISOString(),
     }));
-    const { error } = await savePermissions(supabase, payload);
+    const { error } = await saveUserPermissions(supabase, payload);
     if (error) return notify(error.message);
     notify('Permisos actualizados.', 'success');
     setPermissionsOpen(false);
@@ -188,7 +188,7 @@ export function UsuariosAdmin({ supabase, user }) {
         </form>
       </Modal>
       <Modal open={permissionsOpen} title={`Permisos de ${permissionsUser?.nombre || 'usuario'}`} onClose={() => setPermissionsOpen(false)} className="permissions-modal">
-        <form onSubmit={savePermissions}>
+        <form onSubmit={savePermissionRows}>
           <div className="modal-body permissions-panel">
             <div className="permissions-config-hero">
               <div>

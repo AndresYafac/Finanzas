@@ -13,20 +13,35 @@ export function Config({ onReady, compact = false }) {
   const [status, setStatus] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
+  function updateCompany(patch, preview = false) {
+    const next = { ...company, ...patch };
+    setCompany(next);
+    if (preview) {
+      localStorage.setItem(COMPANY_CONFIG_KEY, JSON.stringify(next));
+      applyVisualConfig(next);
+      window.dispatchEvent(new Event('fintrack_visual_config'));
+    }
+  }
+
   React.useEffect(() => {
     if (compact) return;
     const client = createStoredClient();
     if (!client) return;
     getEmpresaConfig(client).then(({ data }) => {
       if (data) {
+        const local = getCompanyConfig();
         const next = {
-          nombre: data.nombre || DEFAULT_COMPANY_CONFIG.nombre,
-          documento: data.documento || '',
-          direccion: data.direccion || '',
-          telefono: data.telefono || '',
-          logo_url: data.logo_url || '',
-          primary_color: data.primary_color || DEFAULT_COMPANY_CONFIG.primary_color,
-          theme: data.theme || DEFAULT_COMPANY_CONFIG.theme,
+          nombre: data.nombre ?? local.nombre ?? DEFAULT_COMPANY_CONFIG.nombre,
+          documento: data.documento ?? local.documento ?? '',
+          direccion: data.direccion ?? local.direccion ?? '',
+          telefono: data.telefono ?? local.telefono ?? '',
+          logo_url: data.logo_url ?? local.logo_url ?? '',
+          primary_color: local.primary_color ?? data.primary_color ?? DEFAULT_COMPANY_CONFIG.primary_color,
+          accent_color: local.accent_color ?? data.accent_color ?? DEFAULT_COMPANY_CONFIG.accent_color,
+          theme: local.theme ?? data.theme ?? DEFAULT_COMPANY_CONFIG.theme,
+          visual_style: local.visual_style ?? data.visual_style ?? DEFAULT_COMPANY_CONFIG.visual_style,
+          surface_style: local.surface_style ?? data.surface_style ?? DEFAULT_COMPANY_CONFIG.surface_style,
+          density: local.density ?? data.density ?? DEFAULT_COMPANY_CONFIG.density,
         };
         setCompany(next);
         localStorage.setItem(COMPANY_CONFIG_KEY, JSON.stringify(next));
@@ -53,7 +68,7 @@ export function Config({ onReady, compact = false }) {
     }
     localStorage.setItem('sb_url', cleanUrl);
     localStorage.setItem('sb_key', key.trim());
-    setStatus('ConexiÃ³n guardada correctamente.');
+    setStatus('Conexión guardada correctamente.');
     onReady(client);
     setLoading(false);
   }
@@ -84,7 +99,7 @@ export function Config({ onReady, compact = false }) {
     }
     const { data: sessionData } = await client.auth.getSession();
     const adminId = sessionData.session?.user?.id;
-    if (!adminId) return setStatus('Inicia sesiÃ³n para subir el logo.');
+    if (!adminId) return setStatus('Inicia sesión para subir el logo.');
     const ext = file.name.split('.').pop() || 'png';
     const path = `${adminId}/logo-${Date.now()}.${ext}`;
     const { error } = await uploadEmpresaLogo(client, path, file);
@@ -99,28 +114,97 @@ export function Config({ onReady, compact = false }) {
 
   const content = (
     <div className={compact ? '' : 'card-body'}>
-      <div className="alert alert-warning">Usa Ãºnicamente la clave Publishable o anon. Nunca uses service_role.</div>
+      <div className="alert alert-warning">Usa únicamente la clave Publishable o anon. Nunca uses service_role.</div>
       <form onSubmit={save}>
         <Field label="Supabase URL" value={url} onChange={setUrl} placeholder="https://xxxx.supabase.co" />
         <Field label="Publishable / Anon Key" type="password" value={key} onChange={setKey} />
-        <FormActions><Button variant="primary" type="submit" disabled={loading}>{loading ? 'Guardando...' : 'Guardar conexiÃ³n'}</Button></FormActions>
+        <FormActions><Button variant="primary" type="submit" disabled={loading}>{loading ? 'Guardando...' : 'Guardar conexión'}</Button></FormActions>
         {status && <div className="connection-status success">{status}</div>}
       </form>
       {!compact && (
         <form className="config-company-form" onSubmit={saveCompany}>
           <h4>Datos de empresa para reportes</h4>
-          <Field label="Nombre comercial" value={company.nombre} onChange={(value) => setCompany({ ...company, nombre: value })} />
-          <Field label="RUC / Documento" value={company.documento} onChange={(value) => setCompany({ ...company, documento: value })} />
-          <Field label="DirecciÃ³n" value={company.direccion} onChange={(value) => setCompany({ ...company, direccion: value })} />
-          <Field label="TelÃ©fono" value={company.telefono} onChange={(value) => setCompany({ ...company, telefono: value })} />
-          <Field label="URL del logo" value={company.logo_url} onChange={(value) => setCompany({ ...company, logo_url: value })} placeholder="https://..." />
-          <div className="form-row">
-            <SelectField label="Tema visual" value={company.theme || 'light'} onChange={(value) => setCompany({ ...company, theme: value })}>
-              <option value="light">Claro</option>
-              <option value="dark">Oscuro</option>
-            </SelectField>
-            <Field label="Color principal" type="color" value={company.primary_color || DEFAULT_COMPANY_CONFIG.primary_color} onChange={(value) => setCompany({ ...company, primary_color: value })} />
-          </div>
+          <Field label="Nombre comercial" value={company.nombre} onChange={(value) => updateCompany({ nombre: value })} />
+          <Field label="RUC / Documento" value={company.documento} onChange={(value) => updateCompany({ documento: value })} />
+          <Field label="Dirección" value={company.direccion} onChange={(value) => updateCompany({ direccion: value })} />
+          <Field label="Teléfono" value={company.telefono} onChange={(value) => updateCompany({ telefono: value })} />
+          <Field label="URL del logo" value={company.logo_url} onChange={(value) => updateCompany({ logo_url: value })} placeholder="https://..." />
+
+          <section className="visual-settings-panel">
+            <div className="visual-settings-head">
+              <div>
+                <h4>Apariencia del sistema</h4>
+                <p>Personaliza colores, fondo, superficies y densidad. Se previsualiza al seleccionar.</p>
+              </div>
+              <span>Vista previa activa</span>
+            </div>
+
+            <div className="form-row">
+              <SelectField label="Tema visual" value={company.theme || 'light'} onChange={(value) => updateCompany({ theme: value }, true)}>
+                <option value="light">Claro</option>
+                <option value="dark">Oscuro</option>
+              </SelectField>
+              <SelectField label="Estilo visual" value={company.visual_style || 'aurora'} onChange={(value) => updateCompany({ visual_style: value }, true)}>
+                <option value="aurora">Aurora dinámica</option>
+                <option value="minimal">Minimal sobrio</option>
+                <option value="finance">Financiero premium</option>
+                <option value="neon">Neón suave</option>
+              </SelectField>
+            </div>
+
+            <div className="form-row">
+              <SelectField label="Superficies" value={company.surface_style || 'glass'} onChange={(value) => updateCompany({ surface_style: value }, true)}>
+                <option value="glass">Cristal / blur</option>
+                <option value="solid">Sólido</option>
+                <option value="bordered">Bordes marcados</option>
+              </SelectField>
+              <SelectField label="Densidad" value={company.density || 'comfortable'} onChange={(value) => updateCompany({ density: value }, true)}>
+                <option value="compact">Compacta</option>
+                <option value="comfortable">Cómoda</option>
+                <option value="spacious">Espaciada</option>
+              </SelectField>
+            </div>
+
+            <div className="form-row">
+              <Field label="Color principal" type="color" value={company.primary_color || DEFAULT_COMPANY_CONFIG.primary_color} onChange={(value) => updateCompany({ primary_color: value }, true)} />
+              <Field label="Color secundario" type="color" value={company.accent_color || DEFAULT_COMPANY_CONFIG.accent_color} onChange={(value) => updateCompany({ accent_color: value }, true)} />
+            </div>
+
+            <div className="theme-preset-grid">
+              {[
+                { name: 'FinTrack', primary_color: '#1d9e75', accent_color: '#378add', visual_style: 'aurora' },
+                { name: 'Océano', primary_color: '#0ea5e9', accent_color: '#14b8a6', visual_style: 'finance' },
+                { name: 'Púrpura', primary_color: '#8b5cf6', accent_color: '#22c55e', visual_style: 'neon' },
+                { name: 'Ámbar', primary_color: '#f59e0b', accent_color: '#10b981', visual_style: 'minimal' },
+              ].map((preset) => (
+                <button
+                  key={preset.name}
+                  type="button"
+                  className="theme-preset-card"
+                  onClick={() => updateCompany(preset, true)}
+                >
+                  <span className="theme-preset-swatches">
+                    <i style={{ background: preset.primary_color }} />
+                    <i style={{ background: preset.accent_color }} />
+                  </span>
+                  <strong>{preset.name}</strong>
+                </button>
+              ))}
+            </div>
+
+            <div className="theme-live-preview">
+              <div>
+                <span className="preview-label">Balance</span>
+                <strong>S/ 1,250.00</strong>
+                <small>Fondo, cards y acentos aplicados</small>
+              </div>
+              <div className="preview-bars">
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          </section>
           <input ref={logoInputRef} type="file" accept="image/*" hidden onChange={uploadLogo} />
           <FormActions>
             <Button onClick={() => logoInputRef.current?.click()}>Subir logo</Button>
@@ -132,6 +216,7 @@ export function Config({ onReady, compact = false }) {
   );
 
   if (compact) return content;
-  return <div className="profile-section"><Card title="ConfiguraciÃ³n del sistema">{content}</Card></div>;
+  return <div className="profile-section"><Card title="Configuración del sistema">{content}</Card></div>;
 }
+
 

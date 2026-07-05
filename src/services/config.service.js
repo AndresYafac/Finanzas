@@ -6,10 +6,31 @@ export function testSupabaseConnection(client) {
   return client.from('profiles').select('id').limit(1);
 }
 
-export function saveEmpresaConfig(client, adminId, company) {
+export async function saveEmpresaConfig(client, adminId, company) {
+  const payload = { admin_id: adminId, ...company, updated_at: new Date().toISOString() };
+  const result = await client
+    .from('empresa_config')
+    .upsert(payload, { onConflict: 'admin_id' });
+
+  if (!result.error || !/column|schema cache|Could not find/i.test(result.error.message || '')) {
+    return result;
+  }
+
+  const legacyPayload = {
+    admin_id: adminId,
+    nombre: company.nombre,
+    documento: company.documento,
+    direccion: company.direccion,
+    telefono: company.telefono,
+    logo_url: company.logo_url,
+    primary_color: company.primary_color,
+    theme: company.theme,
+    updated_at: payload.updated_at,
+  };
+
   return client
     .from('empresa_config')
-    .upsert({ admin_id: adminId, ...company, updated_at: new Date().toISOString() }, { onConflict: 'admin_id' });
+    .upsert(legacyPayload, { onConflict: 'admin_id' });
 }
 
 export function uploadEmpresaLogo(client, path, file) {

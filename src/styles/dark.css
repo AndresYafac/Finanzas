@@ -234,3 +234,531 @@
 :root[data-theme="dark"] .sidebar-nav::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, .38);
 }
+
+/* Capa premium del modo oscuro */
+:root[data-theme="dark"] {
+  --primary: #1fc997;
+  --primary-hover: #33d6a7;
+  --primary-light: rgba(31, 201, 151, .18);
+  --primary-soft: rgba(31, 201, 151, .12);
+  --primary-dark: #88f4d2;
+  --danger: #fb7185;
+  --danger-light: rgba(251, 113, 133, .14);
+  --warning: #fbbf24;
+  --warning-light: rgba(251, 191, 36, .14);
+  --info: #60a5fa;
+  --info-light: rgba(96, 165, 250, .14);
+  --bg: #060b14;
+  --surface: #10192a;
+  --surface-soft: #0b1321;
+  --surface-elevated: #142238;
+  --sidebar-bg: #050a13;
+  --sidebar-bg-2: #0b1728;
+  --sidebar-text: #b3c0d1;
+  --border: rgba(139, 158, 181, .24);
+  --border-strong: rgba(148, 163, 184, .36);
+  --text: #f5f8fc;
+  --text-muted: #a6b5c8;
+  --text-soft: #7f90a8;
+  --shadow: 0 22px 58px rgba(0, 0, 0, .42), 0 0 0 1px rgba(255, 255, 255, .045);
+  --shadow-strong: 0 34px 100px rgba(0, 0, 0, .62);
+  --ring: 0 0 0 4px rgba(31, 201, 151, .18);
+}
+
+:root[data-theme="dark"] body {
+  color: var(--text);
+  background:
+    radial-gradient(circle at 8% -8%, rgba(31, 201, 151, .20), transparent 29%),
+    radial-gradient(circle at 92% 4%, rgba(96, 165, 250, .15), transparent 28%),
+    radial-gradient(circle at 56% 78%, rgba(168, 85, 247, .08), transparent 34%),
+    linear-gradient(180deg, #050912 0%, #081120 42%, #060b14 100%);
+}
+
+:root[data-theme="dark"] #auth-screen {
+  background:
+    radial-gradient(circle at 72% 18%, rgba(31, 201, 151, .30), transparent 28%),
+    radial-gradient(circle at 18% 72%, rgba(96, 165, 250, .16), transparent 32%),
+    linear-gradient(135deg, #030712 0%, #0b1525 100%);
+}
+
+:root[data-theme="dark"] .auth-card,
+:root[data-theme="dark"] .topbar,
+:root[data-theme="dark"] .page-header,
+:root[data-theme="dark"] .section-header,
+:root[data-theme="dark"] .card,
+:root[data-theme="dark"] .metric-card,
+:root[data-theme="dark"] .account-card,
+:root[data-theme="dark"] .modal,
+:root[data-theme="dark"] .dialog-card,
+:root[data-theme="dark"] .toast,
+:root[data-theme="dark"] .busy-card,
+:root[data-theme="dark"] .global-search-results,
+:root[data-theme="dark"] .alerts-panel {
+  border-color: var(--border);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(31, 201, 151, .09), transparent 31%),
+    linear-gradient(180deg, rgba(20, 34, 56, .96), rgba(12, 22, 38, .96));
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme="dark"] .metric-card,
+:root[data-theme="dark"] .account-card {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(31, 201, 151, .20), transparent 30%),
+    linear-gradient(160deg, rgba(20, 34, 56, .98), rgba(10, 19, 33, .98));
+}
+
+:root[data-theme="dark"] .metric-card:hover,
+:root[data-theme="dark"] .account-card:hover,
+:root[data-theme="dark"] .card:hover {
+  border-color: rgba(31, 201, 151, .34);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, .48), 0 0 0 1px rgba(31, 201, 151, .10);
+}
+
+:root[data-theme="dark"] .card-header,
+:root[data-theme="dark"] .modal-header,
+:root[data-theme="dark"] .modal-footer {
+  border-color: var(--border);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(31, 201, 151, .12), transparent 32%),
+    linear-gradient(180deg, rgba(20, 34, 56, .98), rgba(12, 22, 38, .98));
+}
+
+:root[data-theme="dark"] .modal-overlay,
+:root[data-theme="dark"] .dialog-backdrop {
+  background: rgba(2, 6, 14, .74);
+  backdrop-filter: blur(8px);
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] .global-search,
+:root[data-theme="dark"] .auth-tabs,
+:root[data-theme="dark"] .pin-user {
+  border-color: var(--border);
+  background:
+    linear-gradient(180deg, rgba(13, 25, 43, .96), rgba(8, 17, 31, .96));
+  color: var(--text);
+}
+
+:root[data-theme="dark"] input:focus,
+:root[data-theme="dark"] select:focus,
+:root[data-theme="dark"] textarea:focus,
+:root[data-theme="dark"] .global-search:focus-within {
+  border-color: rgba(31, 201, 151, .58);
+  box-shadow: var(--ring);
+  outline: none;
+}
+
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder {
+  color: #788aa2;
+}
+
+:root[data-theme="dark"] .auth-tab.active,
+:root[data-theme="dark"] .btn,
+:root[data-theme="dark"] .close-btn,
+:root[data-theme="dark"] .toast button,
+:root[data-theme="dark"] .input-action,
+:root[data-theme="dark"] .pagination button,
+:root[data-theme="dark"] .page-size-select,
+:root[data-theme="dark"] .table-actions button {
+  border-color: var(--border);
+  background:
+    linear-gradient(180deg, rgba(20, 34, 56, .98), rgba(12, 23, 39, .98));
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .btn:hover,
+:root[data-theme="dark"] .input-action:hover,
+:root[data-theme="dark"] .close-btn:hover,
+:root[data-theme="dark"] .pagination button:hover {
+  border-color: rgba(31, 201, 151, .45);
+  background:
+    linear-gradient(180deg, rgba(26, 44, 72, .98), rgba(14, 27, 46, .98));
+  color: var(--primary-dark);
+}
+
+:root[data-theme="dark"] .btn-primary,
+:root[data-theme="dark"] .btn-full {
+  border-color: transparent;
+  background: linear-gradient(135deg, #1ca77e, #22c993 54%, #16a085);
+  color: #04120e;
+  box-shadow: 0 16px 34px rgba(31, 201, 151, .28);
+  font-weight: 800;
+}
+
+:root[data-theme="dark"] .btn-primary:hover,
+:root[data-theme="dark"] .btn-full:hover {
+  color: #03110d;
+  background: linear-gradient(135deg, #23d29d, #7af0ca);
+  box-shadow: 0 20px 42px rgba(31, 201, 151, .36);
+}
+
+:root[data-theme="dark"] .btn-danger {
+  border-color: rgba(251, 113, 133, .30);
+  background: rgba(251, 113, 133, .12);
+  color: #ffb1bd;
+}
+
+:root[data-theme="dark"] thead th {
+  border-color: var(--border);
+  background:
+    linear-gradient(180deg, rgba(15, 28, 48, .98), rgba(9, 18, 32, .98));
+  color: #c1ccda;
+}
+
+:root[data-theme="dark"] tbody td {
+  border-bottom-color: var(--border);
+}
+
+:root[data-theme="dark"] tbody tr:hover,
+:root[data-theme="dark"] .global-search-results button:hover,
+:root[data-theme="dark"] .alerts-panel button:hover {
+  background: rgba(31, 201, 151, .08);
+}
+
+:root[data-theme="dark"] .mini-chart-track,
+:root[data-theme="dark"] .progress-bar,
+:root[data-theme="dark"] .mini-chart-empty {
+  background: rgba(148, 163, 184, .13);
+}
+
+:root[data-theme="dark"] .mini-chart-fill,
+:root[data-theme="dark"] .progress-fill {
+  background: linear-gradient(90deg, #22c993, #88f4d2);
+}
+
+:root[data-theme="dark"] .dashboard-config-hero,
+:root[data-theme="dark"] .permissions-config-hero {
+  border-color: rgba(31, 201, 151, .28);
+  background:
+    radial-gradient(circle at top right, rgba(31, 201, 151, .18), transparent 36%),
+    radial-gradient(circle at bottom left, rgba(96, 165, 250, .10), transparent 38%),
+    linear-gradient(135deg, rgba(31, 201, 151, .13), rgba(15, 23, 42, .92));
+}
+
+:root[data-theme="dark"] .dashboard-option-card,
+:root[data-theme="dark"] .permission-row-card,
+:root[data-theme="dark"] .permission-check,
+:root[data-theme="dark"] .loan-disbursement-box {
+  border-color: var(--border);
+  background:
+    linear-gradient(180deg, rgba(17, 31, 52, .98), rgba(10, 19, 34, .98));
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .dashboard-option-card.active,
+:root[data-theme="dark"] .permission-check.active {
+  border-color: rgba(31, 201, 151, .48);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(31, 201, 151, .18), transparent 38%),
+    linear-gradient(180deg, rgba(31, 201, 151, .16), rgba(10, 19, 34, .98));
+  color: #9ff0d3;
+}
+
+:root[data-theme="dark"] .badge-green { background: rgba(34, 197, 94, .18); color: #9ff0a8; }
+:root[data-theme="dark"] .badge-red { background: rgba(251, 113, 133, .16); color: #ffb1bd; }
+:root[data-theme="dark"] .badge-yellow { background: rgba(251, 191, 36, .16); color: #ffe08a; }
+:root[data-theme="dark"] .badge-blue { background: rgba(96, 165, 250, .16); color: #add3ff; }
+:root[data-theme="dark"] .badge-gray { background: rgba(148, 163, 184, .14); color: #d0d8e3; }
+
+:root[data-theme="dark"] .alert-warning {
+  border-color: rgba(251, 191, 36, .38);
+  background: rgba(251, 191, 36, .13);
+  color: #ffe08a;
+}
+
+:root[data-theme="dark"] .alert-danger {
+  border-color: rgba(251, 113, 133, .36);
+  background: rgba(251, 113, 133, .13);
+  color: #ffb1bd;
+}
+
+:root[data-theme="dark"] .page-title,
+:root[data-theme="dark"] h1,
+:root[data-theme="dark"] h2,
+:root[data-theme="dark"] h3,
+:root[data-theme="dark"] h4 {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .page-subtitle,
+:root[data-theme="dark"] .muted,
+:root[data-theme="dark"] .form-help,
+:root[data-theme="dark"] .empty-state,
+:root[data-theme="dark"] .empty-text {
+  color: var(--text-muted);
+}
+
+:root[data-theme="dark"] .sidebar {
+  border-right-color: rgba(148, 163, 184, .14);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(31, 201, 151, .18), transparent 34%),
+    linear-gradient(180deg, #0c1727, #050a13);
+  box-shadow: 14px 0 38px rgba(0, 0, 0, .28);
+}
+
+:root[data-theme="dark"] .brand-icon,
+:root[data-theme="dark"] .mobile-menu-toggle,
+:root[data-theme="dark"] .notification-button,
+:root[data-theme="dark"] .sidebar-toggle {
+  border-color: rgba(31, 201, 151, .22);
+  background:
+    radial-gradient(circle at 30% 20%, rgba(136, 244, 210, .32), transparent 28%),
+    linear-gradient(135deg, #143b34, #11243a);
+  color: #bffbe7;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .32);
+}
+
+:root[data-theme="dark"] .nav-item {
+  color: var(--sidebar-text);
+}
+
+:root[data-theme="dark"] .nav-item:hover {
+  background: rgba(31, 201, 151, .08);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .nav-item.active {
+  background:
+    linear-gradient(135deg, rgba(31, 201, 151, .95), rgba(22, 160, 133, .95));
+  color: #03110d;
+  box-shadow: 0 14px 32px rgba(31, 201, 151, .24);
+}
+
+:root[data-theme="dark"] .metric-label,
+:root[data-theme="dark"] label {
+  color: #8fa4bd;
+}
+
+:root[data-theme="dark"] .metric-value,
+:root[data-theme="dark"] .amount,
+:root[data-theme="dark"] .total-value {
+  color: #f8fbff;
+  text-shadow: 0 8px 26px rgba(0, 0, 0, .28);
+}
+
+:root[data-theme="dark"] .text-success,
+:root[data-theme="dark"] .amount-positive {
+  color: #88f4d2;
+}
+
+:root[data-theme="dark"] .text-danger,
+:root[data-theme="dark"] .amount-negative {
+  color: #ffb1bd;
+}
+
+:root[data-theme="dark"] ::selection {
+  background: rgba(31, 201, 151, .34);
+  color: #fff;
+}
+
+/* Variantes dinamicas del modo oscuro */
+:root[data-theme="dark"][data-visual-style="aurora"] body {
+  background:
+    radial-gradient(circle at 8% -8%, rgba(var(--primary-rgb), .24), transparent 29%),
+    radial-gradient(circle at 92% 4%, rgba(var(--accent-rgb), .18), transparent 28%),
+    radial-gradient(circle at 56% 78%, rgba(168, 85, 247, .08), transparent 34%),
+    linear-gradient(180deg, #050912 0%, #081120 42%, #060b14 100%);
+}
+
+:root[data-theme="dark"][data-visual-style="minimal"] body {
+  background:
+    linear-gradient(180deg, #050912 0%, #0a1220 100%);
+}
+
+:root[data-theme="dark"][data-visual-style="finance"] body {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(var(--primary-rgb), .18), transparent 24%),
+    linear-gradient(135deg, #050912 0%, #0b1728 48%, #070d17 100%);
+}
+
+:root[data-theme="dark"][data-visual-style="neon"] body {
+  background:
+    radial-gradient(circle at 10% 6%, rgba(var(--primary-rgb), .30), transparent 26%),
+    radial-gradient(circle at 90% 12%, rgba(var(--accent-rgb), .26), transparent 28%),
+    linear-gradient(180deg, #040711 0%, #080f1d 100%);
+}
+
+:root[data-theme="dark"][data-surface-style="solid"] .card,
+:root[data-theme="dark"][data-surface-style="solid"] .metric-card,
+:root[data-theme="dark"][data-surface-style="solid"] .account-card,
+:root[data-theme="dark"][data-surface-style="solid"] .topbar,
+:root[data-theme="dark"][data-surface-style="solid"] .modal,
+:root[data-theme="dark"][data-surface-style="solid"] .auth-card {
+  background: #10192a;
+  backdrop-filter: none;
+}
+
+:root[data-theme="dark"][data-surface-style="glass"] .card,
+:root[data-theme="dark"][data-surface-style="glass"] .metric-card,
+:root[data-theme="dark"][data-surface-style="glass"] .account-card,
+:root[data-theme="dark"][data-surface-style="glass"] .topbar,
+:root[data-theme="dark"][data-surface-style="glass"] .modal,
+:root[data-theme="dark"][data-surface-style="glass"] .auth-card {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(var(--primary-rgb), .10), transparent 31%),
+    linear-gradient(180deg, rgba(20, 34, 56, .82), rgba(12, 22, 38, .86));
+  backdrop-filter: blur(18px);
+}
+
+:root[data-theme="dark"][data-surface-style="bordered"] .card,
+:root[data-theme="dark"][data-surface-style="bordered"] .metric-card,
+:root[data-theme="dark"][data-surface-style="bordered"] .account-card,
+:root[data-theme="dark"][data-surface-style="bordered"] .topbar,
+:root[data-theme="dark"][data-surface-style="bordered"] .modal,
+:root[data-theme="dark"][data-surface-style="bordered"] .auth-card {
+  border-color: rgba(var(--primary-rgb), .34);
+  border-width: 2px;
+  box-shadow: 0 22px 58px rgba(0, 0, 0, .48), 0 0 0 1px rgba(var(--primary-rgb), .08);
+}
+
+:root[data-theme="dark"] .visual-settings-panel {
+  border-color: rgba(var(--primary-rgb), .28);
+  background:
+    radial-gradient(circle at top right, rgba(var(--primary-rgb), .16), transparent 34%),
+    linear-gradient(135deg, rgba(var(--primary-rgb), .08), rgba(var(--accent-rgb), .06));
+}
+
+:root[data-theme="dark"] .visual-settings-head span {
+  background: rgba(var(--primary-rgb), .18);
+  color: #c8ffee;
+}
+
+:root[data-theme="dark"] .theme-preset-card {
+  border-color: var(--border);
+  background:
+    linear-gradient(180deg, rgba(17, 31, 52, .98), rgba(10, 19, 34, .98));
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .theme-preset-card:hover {
+  border-color: rgba(var(--primary-rgb), .48);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .28), 0 0 0 1px rgba(var(--primary-rgb), .08);
+}
+
+:root[data-theme="dark"] .theme-preset-swatches i {
+  border-color: #10192a;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .10);
+}
+
+:root[data-theme="dark"] .theme-live-preview {
+  border-color: rgba(var(--primary-rgb), .28);
+  background:
+    radial-gradient(circle at 90% 12%, rgba(var(--accent-rgb), .18), transparent 30%),
+    linear-gradient(135deg, rgba(var(--primary-rgb), .16), rgba(10, 19, 34, .92));
+}
+
+:root[data-theme="dark"] .preview-bars span {
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  box-shadow: 0 0 22px rgba(var(--primary-rgb), .22);
+}
+
+/* Ajustes finales para colores dinamicos */
+:root[data-theme="dark"] select option {
+  background: #0b1525;
+  color: #f5f8fc;
+}
+
+:root[data-theme="dark"] select option:checked,
+:root[data-theme="dark"] select option:hover {
+  background: var(--primary);
+  color: #04120e;
+}
+
+:root[data-theme="dark"] .btn-primary,
+:root[data-theme="dark"] .btn-full,
+:root[data-theme="dark"] .form-actions .btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  border-color: transparent;
+  color: #03110d;
+  box-shadow: 0 16px 34px rgba(var(--primary-rgb), .28);
+}
+
+:root[data-theme="dark"] .btn-primary:hover,
+:root[data-theme="dark"] .btn-full:hover,
+:root[data-theme="dark"] .form-actions .btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent), var(--primary));
+  color: #03110d;
+  box-shadow: 0 20px 44px rgba(var(--primary-rgb), .36);
+}
+
+:root[data-theme="dark"] .btn:hover,
+:root[data-theme="dark"] .input-action:hover,
+:root[data-theme="dark"] .close-btn:hover {
+  border-color: rgba(var(--primary-rgb), .46);
+  color: var(--primary);
+}
+
+:root[data-theme="dark"] .sidebar {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--primary-rgb), .24), transparent 34%),
+    radial-gradient(circle at 96% 22%, rgba(var(--accent-rgb), .14), transparent 30%),
+    linear-gradient(180deg, #0b1728, #040914);
+}
+
+:root[data-theme="dark"] .brand-icon,
+:root[data-theme="dark"] .auth-logo .logo-icon,
+:root[data-theme="dark"] .user-avatar,
+:root[data-theme="dark"] .avatar-big,
+:root[data-theme="dark"] .mobile-menu-toggle,
+:root[data-theme="dark"] .notification-button,
+:root[data-theme="dark"] .sidebar-toggle {
+  background:
+    radial-gradient(circle at 28% 20%, rgba(255, 255, 255, .28), transparent 28%),
+    linear-gradient(135deg, var(--primary), var(--accent));
+  border-color: rgba(var(--primary-rgb), .34);
+  color: #04120e;
+  box-shadow: 0 14px 30px rgba(var(--primary-rgb), .28);
+}
+
+:root[data-theme="dark"] .nav-item:hover {
+  background: rgba(var(--primary-rgb), .10);
+  color: #f5f8fc;
+}
+
+:root[data-theme="dark"] .nav-item.active {
+  background:
+    radial-gradient(circle at 90% 0%, rgba(255, 255, 255, .22), transparent 32%),
+    linear-gradient(135deg, var(--primary), var(--accent));
+  color: #03110d;
+  box-shadow: 0 14px 32px rgba(var(--primary-rgb), .28);
+}
+
+:root[data-theme="dark"] .nav-item.active svg,
+:root[data-theme="dark"] .nav-item.active span {
+  color: #03110d;
+}
+
+:root[data-theme="dark"] .metric-card,
+:root[data-theme="dark"] .account-card {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(var(--primary-rgb), .22), transparent 30%),
+    radial-gradient(circle at 6% 100%, rgba(var(--accent-rgb), .10), transparent 34%),
+    linear-gradient(160deg, rgba(20, 34, 56, .98), rgba(10, 19, 33, .98));
+}
+
+:root[data-theme="dark"] .metric-card:hover,
+:root[data-theme="dark"] .account-card:hover,
+:root[data-theme="dark"] .card:hover {
+  border-color: rgba(var(--primary-rgb), .38);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, .48), 0 0 0 1px rgba(var(--primary-rgb), .12);
+}
+
+:root[data-theme="dark"] .visual-settings-head span,
+:root[data-theme="dark"] .connection-status.success,
+:root[data-theme="dark"] .role-text,
+:root[data-theme="dark"] .account-card svg,
+:root[data-theme="dark"] .account-card b {
+  color: var(--primary);
+}
+
+:root[data-theme="dark"] input[type="color"] {
+  border-color: rgba(var(--primary-rgb), .42);
+  background: #0b1525;
+}
