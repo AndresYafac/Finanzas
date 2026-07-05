@@ -28,6 +28,51 @@ export function AuthCard({ title, children }) {
   );
 }
 
+export function Button({ children, variant = 'default', size = 'default', iconOnly = false, className = '', type = 'button', ...props }) {
+  const classes = [
+    'btn',
+    variant === 'primary' ? 'btn-primary' : '',
+    variant === 'danger' ? 'btn-danger' : '',
+    size === 'sm' ? 'btn-sm' : '',
+    iconOnly ? 'btn-icon' : '',
+    className,
+  ].filter(Boolean).join(' ');
+  return <button type={type} className={classes} {...props}>{children}</button>;
+}
+
+export function Badge({ children, tone = 'gray', className = '' }) {
+  return <span className={`badge badge-${tone} ${className}`.trim()}>{children}</span>;
+}
+
+export function Card({ title, action, children, className = '' }) {
+  return (
+    <div className={`card ${className}`.trim()}>
+      {(title || action) && <div className="card-header"><h3>{title}</h3>{action}</div>}
+      {children}
+    </div>
+  );
+}
+
+export function EmptyState({ children = 'Sin datos' }) {
+  return <div className="empty-state"><p>{children}</p></div>;
+}
+
+export function FormActions({ children, className = '' }) {
+  return <div className={`form-actions ${className}`.trim()}>{children}</div>;
+}
+
+export function PageHeader({ title, subtitle, actions }) {
+  return (
+    <div className="page-header">
+      <div>
+        <h2>{title}</h2>
+        {subtitle && <p>{subtitle}</p>}
+      </div>
+      {actions && <div className="page-header-actions">{actions}</div>}
+    </div>
+  );
+}
+
 export function AppDialogs({ toast, onCloseToast, confirmState, setConfirmState, busy }) {
   function answer(value) {
     confirmState?.resolve(value);
@@ -47,8 +92,8 @@ export function AppDialogs({ toast, onCloseToast, confirmState, setConfirmState,
             <h3>Confirmar acción</h3>
             <p>{confirmState.question}</p>
             <div className="dialog-actions">
-              <button className="btn" type="button" onClick={() => answer(false)}>Cancelar</button>
-              <button className="btn btn-danger" type="button" onClick={() => answer(true)}>Confirmar</button>
+              <Button onClick={() => answer(false)}>Cancelar</Button>
+              <Button variant="danger" onClick={() => answer(true)}>Confirmar</Button>
             </div>
           </div>
         </div>
@@ -104,8 +149,8 @@ export function Modal({ open, title, onClose, children, className = '' }) {
 export function RowActions({ onEdit, onDelete, canEdit = true, canDelete = true }) {
   return (
     <div className="row-actions">
-      {canEdit && <button type="button" className="btn btn-sm btn-icon" onClick={onEdit} title="Editar"><Pencil size={14} /></button>}
-      {canDelete && <button type="button" className="btn btn-sm btn-icon btn-danger" onClick={onDelete} title="Eliminar"><Trash2 size={14} /></button>}
+      {canEdit && <Button size="sm" iconOnly onClick={onEdit} title="Editar"><Pencil size={14} /></Button>}
+      {canDelete && <Button size="sm" iconOnly variant="danger" onClick={onDelete} title="Eliminar"><Trash2 size={14} /></Button>}
     </div>
   );
 }
@@ -123,9 +168,8 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
   return (
     <>
       {(setSearch || action) && <div className="action-bar"><div>{setSearch && <div className="search-wrap"><Search size={16} /><input className="search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Buscar ${title.toLowerCase()}...`} /></div>}</div>{action}</div>}
-      <div className="card">
-        <div className="card-header"><h3>{title}</h3>{onExport && <button className="btn btn-sm" type="button" onClick={onExport}><Download size={14} />Exportar CSV</button>}</div>
-        <div className="table-wrap"><table><thead><tr>{visibleColumns.map((c, i) => <th key={`${c}-${i}`}>{c}</th>)}</tr></thead><tbody>{rows.length ? visibleRows.map((row, i) => <tr key={`${start}-${i}`}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>) : <tr><td colSpan={columnCount || columns.length}><div className="empty-state"><p>Sin datos</p></div></td></tr>}</tbody></table></div>
+      <Card title={title} action={onExport && <Button size="sm" onClick={onExport}><Download size={14} />Exportar CSV</Button>}>
+        <div className="table-wrap"><table><thead><tr>{visibleColumns.map((c, i) => <th key={`${c}-${i}`}>{c}</th>)}</tr></thead><tbody>{rows.length ? visibleRows.map((row, i) => <tr key={`${start}-${i}`}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>) : <tr><td colSpan={columnCount || columns.length}><EmptyState /></td></tr>}</tbody></table></div>
         {rows.length > 0 && (
           <div className="pagination">
             <span>Mostrando {start + 1}-{Math.min(start + limit, rows.length)} de {rows.length}</span>
@@ -136,13 +180,13 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
                 <option value={20}>20</option>
                 <option value={50}>50</option>
               </select>
-              <button className="btn btn-sm" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</button>
+              <Button size="sm" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Anterior</Button>
               <span>Página {currentPage} de {totalPages}</span>
-              <button className="btn btn-sm" type="button" disabled={currentPage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Siguiente</button>
+              <Button size="sm" disabled={currentPage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Siguiente</Button>
             </div>
           </div>
         )}
-      </div>
+      </Card>
     </>
   );
 }

@@ -1,59 +1,65 @@
-# FinTrack Pro - Resumen de trabajo y pendientes
+﻿# FinTrack Pro - Resumen de trabajo y pendientes
+
+> Nota 2026-07-05: este documento conserva historial del proyecto. El resumen tecnico limpio y actualizado esta en `docs/RESUMEN-TECNICO-ACTUALIZADO.md`.
 
 Fecha: 04/07/2026
 
 ## 1. Objetivo del proyecto
 
-FinTrack Pro pasó de ser una vista HTML local a una aplicación React con Supabase, pensada para usarse en web y móvil como sistema de gestión financiera personal/administrativa.
+FinTrack Pro pasÃ³ de ser una vista HTML local a una aplicaciÃ³n React con Supabase, pensada para usarse en web y mÃ³vil como sistema de gestiÃ³n financiera personal/administrativa.
 
-El sistema ahora permite trabajar con usuarios, clientes, cuentas bancarias, deudas por cobrar, préstamos otorgados, préstamos recibidos, pagos, ingresos, egresos, presupuestos, metas, reportes, backup, auditoría, permisos y configuración.
+El sistema ahora permite trabajar con usuarios, clientes, cuentas bancarias, deudas por cobrar, prÃ©stamos otorgados, prÃ©stamos recibidos, pagos, ingresos, egresos, presupuestos, metas, reportes, backup, auditorÃ­a, permisos y configuraciÃ³n.
 
 ## 2. Estructura actual del proyecto
 
-- `src/main.jsx`: contiene la mayor parte de las vistas y lógica principal de la app.
-- `src/components/ui.jsx`: componentes reutilizables como modales, tablas, acciones, formularios y diálogos.
-- `src/styles.css`: estilos globales, diseño web, diseño móvil, modales, cards, menú, dashboard y formularios.
-- `src/config/supabase.js`: creación del cliente Supabase.
-- `src/controllers`: lógica separada para autenticación y perfil.
+- `src/main.jsx`: orquesta sesion, navegacion interna, layout, busqueda global y alertas.
+- `src/pages`: vistas principales separadas por modulo.
+- `src/pages/finance`: vistas financieras y administrativas separadas por archivo.
+- `src/pages/finance/financePageShared.jsx`: helpers compartidos de vistas financieras.
+- `src/components/ui.jsx`: componentes reutilizables como modales, tablas, acciones, formularios y dialogos.
+- `src/styles.css`: entrada de estilos globales modularizados.
+- `src/styles`: estilos separados por base, responsive, modo oscuro y refresco visual.
+- `src/config/supabase.js`: creaciÃ³n del cliente Supabase.
+- `src/controllers`: lÃ³gica separada para autenticaciÃ³n y perfil.
 - `src/services/feedback.js`: alertas personalizadas, confirmaciones y estados de carga.
 - `src/utils`: utilidades de formato, seguridad y helpers.
 - `public/sw.js`: service worker para PWA/offline.
-- `public/offline.html`: pantalla básica offline.
-- `public/icons`: iconos de la aplicación.
-- `docs`: documentación del proyecto.
+- `public/offline.html`: pantalla bÃ¡sica offline.
+- `public/icons`: iconos de la aplicaciÃ³n.
+- `docs`: documentaciÃ³n del proyecto.
 - `supabase/sql`: scripts SQL organizados para crear o reparar tablas, funciones, RLS y permisos.
 
-## 3. Migración a React y MVC inicial
+## 3. MigraciÃ³n a React y MVC inicial
 
-Se migró el sistema a React con Vite.
+Se migrÃ³ el sistema a React con Vite.
 
-Se organizó parcialmente con enfoque MVC:
+Se organizo con enfoque MVC inicial:
 
 - Modelo/base de datos: scripts SQL en `supabase/sql`.
 - Controladores: `src/controllers`.
 - Servicios: `src/services`.
-- Vistas/componentes: `src/main.jsx` y `src/components`.
-- Configuración: `src/config`.
+- Vistas/componentes: `src/pages`, `src/pages/finance`, `src/components` y `src/components/layout`.
+- ConfiguraciÃ³n: `src/config`.
 
-Pendiente importante: `src/main.jsx` todavía está demasiado grande. Para un MVC más limpio se debe separar cada vista en archivos independientes.
+Estado actual: `src/main.jsx` ya no concentra las vistas principales; quedo como orquestador de la aplicacion.
 
-## 4. Supabase y autenticación
+## 4. Supabase y autenticaciÃ³n
 
-Se integró Supabase con:
+Se integrÃ³ Supabase con:
 
 - URL y anon key por variables de entorno `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
-- Login con correo y contraseña.
+- Login con correo y contraseÃ±a.
 - Registro de usuarios.
-- Confirmación por correo.
+- ConfirmaciÃ³n por correo.
 - Perfil del usuario.
 - Rol `admin` y rol `user`.
 - Primer administrador.
 - Recordar cuenta.
-- PIN móvil de 6 dígitos.
-- Cambio de contraseña desde Mi perfil.
-- Cerrar sesión normal y cierre global de sesiones.
+- PIN mÃ³vil de 6 dÃ­gitos.
+- Cambio de contraseÃ±a desde Mi perfil.
+- Cerrar sesiÃ³n normal y cierre global de sesiones.
 
-También se corrigieron problemas relacionados con:
+TambiÃ©n se corrigieron problemas relacionados con:
 
 - URL de Supabase mal ingresada.
 - Uso de anon key en vez de service role.
@@ -64,24 +70,24 @@ También se corrigieron problemas relacionados con:
 
 ## 5. Usuarios, clientes y permisos
 
-Se aclaró y corrigió la lógica:
+Se aclarÃ³ y corrigiÃ³ la lÃ³gica:
 
 - `profiles` representa usuarios del sistema.
 - `clientes` representa clientes registrados por el administrador.
-- Un usuario registrado no debe aparecer automáticamente como cliente.
+- Un usuario registrado no debe aparecer automÃ¡ticamente como cliente.
 - El administrador puede registrar clientes desde la vista Clientes.
-- Los clientes se usan en deudas, pagos, préstamos y cobros.
+- Los clientes se usan en deudas, pagos, prÃ©stamos y cobros.
 
-Se agregó vista de administración de usuarios solo para administradores:
+Se agregÃ³ vista de administraciÃ³n de usuarios solo para administradores:
 
 - Listar usuarios.
 - Activar/desactivar usuarios.
 - Editar usuarios.
-- Eliminación lógica.
+- EliminaciÃ³n lÃ³gica.
 - Evitar operar sobre el propio usuario.
 - Configurar permisos por usuario.
 
-Se agregó sistema de permisos por módulo:
+Se agregÃ³ sistema de permisos por mÃ³dulo:
 
 - Ver.
 - Crear.
@@ -89,54 +95,54 @@ Se agregó sistema de permisos por módulo:
 - Eliminar.
 - Exportar.
 
-El modal de permisos fue rediseñado con cards por módulo y checkboxes visuales para que vaya acorde al diseño del sistema.
+El modal de permisos fue rediseÃ±ado con cards por mÃ³dulo y checkboxes visuales para que vaya acorde al diseÃ±o del sistema.
 
 Script relacionado:
 
 - `supabase/sql/PERMISOS-AUDITORIA-AVANZADA.sql`
 
-## 6. Módulos financieros implementados o corregidos
+## 6. MÃ³dulos financieros implementados o corregidos
 
 ### Dashboard
 
-Se mejoró con:
+Se mejorÃ³ con:
 
 - Cards principales.
 - Balance de cuentas.
 - Pendiente por cobrar.
 - Pagos del mes.
 - Ingresos / egresos.
-- Gráficos simples dentro de las cards.
+- GrÃ¡ficos simples dentro de las cards.
 - Deudas por vencer.
-- Últimos pagos.
+- Ãšltimos pagos.
 - Alertas de presupuesto.
-- Metas próximas.
-- Configuración de cards visibles.
+- Metas prÃ³ximas.
+- ConfiguraciÃ³n de cards visibles.
 
 ### Clientes
 
-Se agregó o corrigió:
+Se agregÃ³ o corrigiÃ³:
 
 - Registro de clientes.
-- Edición y eliminación.
-- Separación correcta entre clientes y usuarios.
-- Paginación.
+- EdiciÃ³n y eliminaciÃ³n.
+- SeparaciÃ³n correcta entre clientes y usuarios.
+- PaginaciÃ³n.
 - Uso en combos financieros.
 
 ### Cuentas bancarias
 
-Se ajustó para:
+Se ajustÃ³ para:
 
 - Mostrar cuentas como cards.
 - Editar/eliminar desde la card.
 - Quitar tabla innecesaria.
 - Registrar transferencias entre cuentas propias.
 - Registrar transferencias hacia otras cuentas.
-- Actualizar saldos según movimientos.
+- Actualizar saldos segÃºn movimientos.
 
 ### Deudas por cobrar
 
-Se redefinió la lógica:
+Se redefiniÃ³ la lÃ³gica:
 
 - Son deudas que un cliente tiene conmigo.
 - No descuentan una cuenta al crearse.
@@ -145,61 +151,61 @@ Se redefinió la lógica:
 
 ### Pagos / cobros generales
 
-Se corrigió la lógica:
+Se corrigiÃ³ la lÃ³gica:
 
 - Un pago recibido de cliente es ingreso.
 - Debe aumentar la cuenta bancaria.
-- Se agregó relación con cuenta bancaria.
-- Se agregó edición y eliminación para corregir operaciones.
+- Se agregÃ³ relaciÃ³n con cuenta bancaria.
+- Se agregÃ³ ediciÃ³n y eliminaciÃ³n para corregir operaciones.
 
-### Préstamos otorgados
+### PrÃ©stamos otorgados
 
-Se separó de deudas:
+Se separÃ³ de deudas:
 
 - Representa dinero que yo presto a un cliente.
-- Al registrar un préstamo otorgado, debe contar como egreso si sale de una cuenta.
-- El cobro de ese préstamo cuenta como ingreso.
+- Al registrar un prÃ©stamo otorgado, debe contar como egreso si sale de una cuenta.
+- El cobro de ese prÃ©stamo cuenta como ingreso.
 
-### Cobros de préstamos
+### Cobros de prÃ©stamos
 
-Se agregó vista para registrar pagos recibidos por préstamos otorgados.
+Se agregÃ³ vista para registrar pagos recibidos por prÃ©stamos otorgados.
 
-### Préstamos recibidos
+### PrÃ©stamos recibidos
 
-Se agregó lógica para dinero que me prestaron a mí:
+Se agregÃ³ lÃ³gica para dinero que me prestaron a mÃ­:
 
-- Acreedor: persona, entidad o empresa que me prestó dinero.
-- Si el dinero ya no está en cuenta porque fue hace meses, se puede registrar como deuda histórica sin afectar saldo actual.
+- Acreedor: persona, entidad o empresa que me prestÃ³ dinero.
+- Si el dinero ya no estÃ¡ en cuenta porque fue hace meses, se puede registrar como deuda histÃ³rica sin afectar saldo actual.
 - Si el dinero entra a una cuenta, puede registrarse afectando saldo.
 
-### Pagos de préstamos recibidos
+### Pagos de prÃ©stamos recibidos
 
-Se agregó vista para registrar pagos que hago a mis acreedores.
+Se agregÃ³ vista para registrar pagos que hago a mis acreedores.
 
 ### Ingresos / egresos
 
-Se agregó:
+Se agregÃ³:
 
 - Movimiento tipo ingreso o egreso.
-- Selección de cuenta bancaria afectada.
-- Categorías/tipos de movimiento.
+- SelecciÃ³n de cuenta bancaria afectada.
+- CategorÃ­as/tipos de movimiento.
 - Mantenimiento de tipos de ingreso/egreso.
 - Egresos como servicios, plataformas, proveedores.
 - Ingresos como pago empresa, pago extra, etc.
 
 ### Presupuestos
 
-Se agregó control mensual de presupuestos por categoría/tipo.
+Se agregÃ³ control mensual de presupuestos por categorÃ­a/tipo.
 
 ### Metas
 
-Se agregó control de metas financieras.
+Se agregÃ³ control de metas financieras.
 
-## 7. Reportes, backup y auditoría
+## 7. Reportes, backup y auditorÃ­a
 
 ### Reportes
 
-Se corrigió exportación:
+Se corrigiÃ³ exportaciÃ³n:
 
 - CSV.
 - JSON.
@@ -210,57 +216,57 @@ Se corrigió exportación:
 
 ### Backup
 
-Se agregó:
+Se agregÃ³:
 
-- Exportación de información.
-- Importación CSV/XLSX.
+- ExportaciÃ³n de informaciÃ³n.
+- ImportaciÃ³n CSV/XLSX.
 - Dependencia `xlsx`.
 
-### Auditoría
+### AuditorÃ­a
 
-Se agregó:
+Se agregÃ³:
 
 - Registro de acciones importantes.
-- Función avanzada `registrar_auditoria_avanzada`.
-- Consulta de auditoría.
+- FunciÃ³n avanzada `registrar_auditoria_avanzada`.
+- Consulta de auditorÃ­a.
 - Filtros.
 
-## 8. PWA y publicación
+## 8. PWA y publicaciÃ³n
 
-Se agregó soporte para app instalable:
+Se agregÃ³ soporte para app instalable:
 
 - Manifest.
 - Service worker.
-- Página offline.
-- Botón "Instalar app".
-- Detección de actualización disponible.
-- Compatibilidad básica para Vercel.
+- PÃ¡gina offline.
+- BotÃ³n "Instalar app".
+- DetecciÃ³n de actualizaciÃ³n disponible.
+- Compatibilidad bÃ¡sica para Vercel.
 
-También se corrigió el problema de que en Vercel volvía a pedir Supabase, indicando que las variables deben configurarse en Production, no solo Development.
+TambiÃ©n se corrigiÃ³ el problema de que en Vercel volvÃ­a a pedir Supabase, indicando que las variables deben configurarse en Production, no solo Development.
 
 Variables esperadas:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-## 9. Diseño web y móvil
+## 9. DiseÃ±o web y mÃ³vil
 
-Se trabajó en:
+Se trabajÃ³ en:
 
-- Menú lateral web.
-- Opción para ocultar/mostrar menú en web.
-- Menú inferior móvil.
-- Corrección de scroll lateral.
+- MenÃº lateral web.
+- OpciÃ³n para ocultar/mostrar menÃº en web.
+- MenÃº inferior mÃ³vil.
+- CorrecciÃ³n de scroll lateral.
 - Uso de pantalla completa en vistas generales.
-- Perfil y configuración centrados.
-- Cards más limpias.
+- Perfil y configuraciÃ³n centrados.
+- Cards mÃ¡s limpias.
 - Modales para guardar/editar.
 - Alertas personalizadas en lugar de alerts del navegador.
 - Estados visuales de carga al ingresar, guardar, borrar, eliminar y descargar.
-- Botón de cerrar sesión visible en móvil.
-- Rediseño de Mi perfil para web y móvil.
-- Corrección de botones tapados por menú inferior móvil.
-- Rediseño de iconos de notificaciones y ocultar menú.
+- BotÃ³n de cerrar sesiÃ³n visible en mÃ³vil.
+- RediseÃ±o de Mi perfil para web y mÃ³vil.
+- CorrecciÃ³n de botones tapados por menÃº inferior mÃ³vil.
+- RediseÃ±o de iconos de notificaciones y ocultar menÃº.
 
 ## 10. Scripts SQL importantes
 
@@ -268,47 +274,41 @@ Scripts principales en `supabase/sql`:
 
 - `supabase-schema.sql`: esquema base.
 - `PERFIL-SCHEMA.sql`: columnas de perfil.
-- `PIN-MOVIL-SCHEMA.sql`: PIN móvil.
+- `PIN-MOVIL-SCHEMA.sql`: PIN mÃ³vil.
 - `MOVIMIENTOS-SCHEMA.sql`: movimientos.
 - `TIPOS-MOVIMIENTO-SCHEMA.sql`: tipos de ingreso/egreso.
 - `MOVIMIENTOS-CUENTAS-SCHEMA.sql`: movimientos asociados a cuentas.
 - `TRANSFERENCIAS-SCHEMA.sql`: transferencias.
-- `DEUDAS-PRESTAMOS-SCHEMA.sql`: deudas y préstamos.
-- `PRESTAMOS-RECIBIDOS-SCHEMA.sql`: préstamos recibidos.
-- `REPARAR-RPC-PAGOS.sql`: función de pagos.
-- `ADMIN-USUARIOS-SCHEMA.sql`: administración de usuarios.
-- `PERMISOS-AUDITORIA-AVANZADA.sql`: permisos, auditoría avanzada y storage.
+- `DEUDAS-PRESTAMOS-SCHEMA.sql`: deudas y prÃ©stamos.
+- `PRESTAMOS-RECIBIDOS-SCHEMA.sql`: prÃ©stamos recibidos.
+- `REPARAR-RPC-PAGOS.sql`: funciÃ³n de pagos.
+- `ADMIN-USUARIOS-SCHEMA.sql`: administraciÃ³n de usuarios.
+- `PERMISOS-AUDITORIA-AVANZADA.sql`: permisos, auditorÃ­a avanzada y storage.
 
 ## 11. Validaciones realizadas
 
-Se ejecutó build varias veces:
+Se ejecutÃ³ build varias veces:
 
 ```bash
 npm run build
 ```
 
-El build terminó correctamente después de los cambios recientes.
+El build terminÃ³ correctamente despuÃ©s de los cambios recientes.
 
-## 12. Pendientes técnicos importantes
+## 12. Pendientes tÃ©cnicos importantes
 
 ### Alta prioridad
 
 1. Separar `src/main.jsx` en vistas independientes.
 
-   Ahora el archivo concentra demasiadas responsabilidades. Recomendación:
+   Estado: realizado.
 
-   - `src/views/Dashboard.jsx`
-   - `src/views/Clientes.jsx`
-   - `src/views/Cuentas.jsx`
-   - `src/views/Deudas.jsx`
-   - `src/views/PrestamosOtorgados.jsx`
-   - `src/views/PrestamosRecibidos.jsx`
-   - `src/views/Pagos.jsx`
-   - `src/views/Movimientos.jsx`
-   - `src/views/Reportes.jsx`
-   - `src/views/Perfil.jsx`
-   - `src/views/UsuariosAdmin.jsx`
+   Las vistas quedaron en:
 
+   - `src/pages/Dashboard.jsx`
+   - `src/pages/Perfil.jsx`
+   - `src/pages/Config.jsx`
+   - `src/pages/finance/*.jsx`
 2. Crear una capa real de servicios por entidad.
 
    Ejemplo:
@@ -319,7 +319,7 @@ El build terminó correctamente después de los cambios recientes.
    - `src/services/prestamos.service.js`
    - `src/services/reportes.service.js`
 
-3. Revisar todas las políticas RLS en Supabase.
+3. Revisar todas las polÃ­ticas RLS en Supabase.
 
    El sistema depende de RLS para seguridad. Hay que validar tabla por tabla:
 
@@ -336,7 +336,7 @@ El build terminó correctamente después de los cambios recientes.
 
 4. Validar saldos con funciones SQL transaccionales.
 
-   Las operaciones que cambian dinero deberían ejecutarse con RPCs atómicas para evitar inconsistencias:
+   Las operaciones que cambian dinero deberÃ­an ejecutarse con RPCs atÃ³micas para evitar inconsistencias:
 
    - registrar pago.
    - editar pago.
@@ -345,14 +345,14 @@ El build terminó correctamente después de los cambios recientes.
    - editar egreso.
    - eliminar egreso.
    - transferencias.
-   - préstamo otorgado.
-   - cobro de préstamo.
-   - préstamo recibido.
-   - pago de préstamo recibido.
+   - prÃ©stamo otorgado.
+   - cobro de prÃ©stamo.
+   - prÃ©stamo recibido.
+   - pago de prÃ©stamo recibido.
 
 5. Crear pruebas manuales o automatizadas por flujo financiero.
 
-   Flujos mínimos:
+   Flujos mÃ­nimos:
 
    - crear cuenta.
    - crear cliente.
@@ -360,25 +360,25 @@ El build terminó correctamente después de los cambios recientes.
    - registrar pago de deuda.
    - editar pago.
    - eliminar pago.
-   - registrar préstamo otorgado.
-   - cobrar préstamo.
-   - registrar préstamo recibido histórico.
-   - pagar préstamo recibido.
+   - registrar prÃ©stamo otorgado.
+   - cobrar prÃ©stamo.
+   - registrar prÃ©stamo recibido histÃ³rico.
+   - pagar prÃ©stamo recibido.
    - registrar ingreso.
    - registrar egreso.
    - transferir entre cuentas.
 
 ### Prioridad media
 
-6. Mejorar dashboard con gráficos más completos.
+6. Mejorar dashboard con grÃ¡ficos mÃ¡s completos.
 
-   Posibles gráficos:
+   Posibles grÃ¡ficos:
 
    - Ingresos vs egresos por mes.
    - Saldos por cuenta.
    - Top clientes con deuda.
-   - Categorías con mayor gasto.
-   - Evolución de patrimonio.
+   - CategorÃ­as con mayor gasto.
+   - EvoluciÃ³n de patrimonio.
 
 7. Agregar filtros avanzados en todas las tablas.
 
@@ -389,39 +389,39 @@ El build terminó correctamente después de los cambios recientes.
    - cuenta.
    - estado.
    - tipo.
-   - monto mínimo/máximo.
+   - monto mÃ­nimo/mÃ¡ximo.
 
-8. Agregar exportación PDF por módulo.
+8. Agregar exportaciÃ³n PDF por mÃ³dulo.
 
-   Ya existe exportación en reportes, pero faltaría por módulo:
+   Ya existe exportaciÃ³n en reportes, pero faltarÃ­a por mÃ³dulo:
 
    - clientes.
    - cuentas.
    - deudas.
    - pagos.
-   - préstamos.
+   - prÃ©stamos.
    - movimientos.
 
 9. Mejorar importaciones.
 
    Pendiente:
 
-   - Validación previa antes de importar.
+   - ValidaciÃ³n previa antes de importar.
    - Vista de errores por fila.
    - Plantillas descargables CSV/XLSX.
 
-10. Mejorar auditoría.
+10. Mejorar auditorÃ­a.
 
    Pendiente:
 
-   - Mostrar antes/después de cambios.
+   - Mostrar antes/despuÃ©s de cambios.
    - Filtros por usuario.
-   - Exportar auditoría.
+   - Exportar auditorÃ­a.
    - Registrar IP/user agent si es necesario.
 
 ### Prioridad baja
 
-11. Notificaciones internas más completas.
+11. Notificaciones internas mÃ¡s completas.
 
    Posibles alertas:
 
@@ -429,14 +429,14 @@ El build terminó correctamente después de los cambios recientes.
    - Presupuestos superados.
    - Metas vencidas.
    - Saldos bajos.
-   - Préstamos por cobrar.
-   - Pagos próximos.
+   - PrÃ©stamos por cobrar.
+   - Pagos prÃ³ximos.
 
 12. Modo oscuro.
 
-13. Personalización visual.
+13. PersonalizaciÃ³n visual.
 
-   - Logo desde configuración.
+   - Logo desde configuraciÃ³n.
    - Colores de marca.
    - Nombre de empresa.
    - Datos para reportes.
@@ -446,7 +446,7 @@ El build terminó correctamente después de los cambios recientes.
    Actualmente hay campo moneda, pero falta:
 
    - Tipo de cambio.
-   - Conversión.
+   - ConversiÃ³n.
    - Reportes consolidados.
 
 15. Adjuntos y comprobantes.
@@ -466,13 +466,36 @@ El build terminó correctamente después de los cambios recientes.
    - Cron jobs.
    - Servicio externo de email/push.
 
-## 13. Recomendación de siguiente paso
+## 13. RecomendaciÃ³n de siguiente paso
 
-Antes de agregar más funciones nuevas, conviene hacer una limpieza técnica:
+Antes de agregar mÃ¡s funciones nuevas, conviene hacer una limpieza tÃ©cnica:
 
-1. Separar `src/main.jsx` por vistas.
-2. Crear servicios por entidad.
-3. Revisar RLS y RPCs financieras.
-4. Hacer pruebas flujo por flujo.
+1. Crear servicios por entidad.
+2. Revisar RLS y RPCs financieras.
+3. Hacer pruebas flujo por flujo.
 
-Eso va a dejar el proyecto más estable para seguir creciendo sin romper funcionalidades ya terminadas.
+Eso va a dejar el proyecto mÃ¡s estable para seguir creciendo sin romper funcionalidades ya terminadas.
+
+## 14. Cierre de ordenamiento tecnico
+
+Estado aplicado:
+
+- `src/main.jsx` quedo reducido a orquestacion de sesion, layout, navegacion interna, busqueda global y alertas.
+- Las vistas principales se separaron en archivos propios:
+  - `src/pages/Dashboard.jsx`
+  - `src/pages/Perfil.jsx`
+  - `src/pages/Config.jsx`
+  - `src/pages/finance/*.jsx`
+- Las utilidades compartidas de paginas financieras quedaron en `src/pages/finance/financePageShared.jsx`.
+- Los componentes base quedaron concentrados en `src/components/ui.jsx`.
+- La autenticacion quedo separada en `src/components/auth/Auth.jsx`.
+- El layout quedo separado en `src/components/layout/AppLayout.jsx`.
+- La configuracion visual quedo separada en `src/config/visualConfig.js`.
+- El CSS quedo modularizado en `src/styles/`.
+- Los archivos SQL estan ordenados en `supabase/sql/`.
+- Los documentos de analisis y pendientes estan ordenados en `docs/`, `docs/analisis/` y `docs/pendientes/`.
+
+Validacion:
+
+- `npm run build` ejecutado correctamente despues del ordenamiento final.
+- Queda solo una advertencia normal de Vite por tamano de chunk. No bloquea publicacion.

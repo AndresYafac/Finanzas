@@ -19,3 +19,15 @@ export function printHtmlReport(title, html) {
   win.print();
   return true;
 }
+
+export function listReportesData(supabase, adminId) {
+  return Promise.all([
+    supabase.from('deudas').select('*,clientes(nombre,apellido)').eq('admin_id', adminId),
+    supabase.from('movimientos').select('*,tipos_movimiento(nombre)').eq('admin_id', adminId),
+    supabase.from('presupuestos').select('*,tipos_movimiento(nombre)').eq('admin_id', adminId),
+    supabase.from('metas').select('*').eq('admin_id', adminId),
+    supabase.from('clientes').select('id,nombre,apellido').eq('admin_id', adminId).order('nombre'),
+    supabase.from('cuentas').select('id,banco,tipo').eq('admin_id', adminId).order('banco'),
+    supabase.from('tipos_movimiento').select('id,nombre,tipo').eq('admin_id', adminId).order('nombre'),
+  ]);
+}
