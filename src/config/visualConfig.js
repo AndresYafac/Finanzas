@@ -1,6 +1,7 @@
 import { storage } from '../services/storage.service';
 
 export const COMPANY_CONFIG_KEY = 'fintrack_company_config';
+export const VISUAL_CONFIG_KEY = 'fintrack_visual_config';
 
 export const DEFAULT_COMPANY_CONFIG = {
   nombre: 'FinTrack Pro',
@@ -31,7 +32,32 @@ export function getCompanyConfig() {
   }
 }
 
-export function applyVisualConfig(config = getCompanyConfig()) {
+export function getVisualConfig(userId) {
+  try {
+    const userConfig = userId ? storage.getJson(`${VISUAL_CONFIG_KEY}_${userId}`, null) : null;
+    const sharedConfig = storage.getJson(VISUAL_CONFIG_KEY, null);
+    const companyConfig = getCompanyConfig();
+    return {
+      primary_color: companyConfig.primary_color || DEFAULT_COMPANY_CONFIG.primary_color,
+      accent_color: companyConfig.accent_color || DEFAULT_COMPANY_CONFIG.accent_color,
+      theme: companyConfig.theme || DEFAULT_COMPANY_CONFIG.theme,
+      visual_style: companyConfig.visual_style || DEFAULT_COMPANY_CONFIG.visual_style,
+      surface_style: companyConfig.surface_style || DEFAULT_COMPANY_CONFIG.surface_style,
+      density: companyConfig.density || DEFAULT_COMPANY_CONFIG.density,
+      ...(sharedConfig || {}),
+      ...(userConfig || {}),
+    };
+  } catch {
+    return DEFAULT_COMPANY_CONFIG;
+  }
+}
+
+export function saveVisualConfig(userId, config) {
+  const key = userId ? `${VISUAL_CONFIG_KEY}_${userId}` : VISUAL_CONFIG_KEY;
+  storage.setJson(key, config);
+}
+
+export function applyVisualConfig(config = getVisualConfig()) {
   const root = document.documentElement;
   const merged = { ...DEFAULT_COMPANY_CONFIG, ...config };
   root.dataset.theme = merged.theme === 'dark' ? 'dark' : 'light';

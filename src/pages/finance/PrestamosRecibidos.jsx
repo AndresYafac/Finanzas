@@ -79,7 +79,7 @@ export function PrestamosRecibidos({ supabase, user, can = () => true }) {
   }
   async function remove(row) {
     if (!can('delete')) return notify('No tienes permiso para eliminar.');
-    if (!(await confirmAction(`Eliminar préstamo recibido de ${row.acreedor || ''}?`))) return;
+    if (!(await confirmAction(`Eliminar préstamo por pagar de ${row.acreedor || ''}?`))) return;
     const { error } = await eliminarPrestamoRecibido(supabase, row.id);
     if (error) return notify(error.message);
     load();
@@ -115,24 +115,24 @@ export function PrestamosRecibidos({ supabase, user, can = () => true }) {
   return (
     <>
       <TableSection
-        title="Préstamos recibidos"
-        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo préstamo recibido</button>}
-        columns={['Acreedor', 'Descripción', 'Tipo', 'Monto original', 'Pagado', 'Pendiente', 'Vencimiento', 'Estado']}
+        title="Préstamos por pagar"
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo préstamo por pagar</button>}
+        columns={['Acreedor', 'Concepto', 'Origen', 'Importe', 'Pagado', 'Saldo', 'Vencimiento', 'Estado']}
         rows={rows.map((row) => {
           const pendiente = Number(row.saldo_inicial || 0) - Number(row.monto_pagado || 0);
           return [row.acreedor, row.descripcion, row.es_antiguo ? 'Antiguo sin saldo' : `Ingreso a ${row.cuentas?.banco || '-'}`, money(row.monto_original), money(row.monto_pagado), money(pendiente), dateFmt(row.fecha_vencimiento), badge(estado(row)), <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(row)} onDelete={() => remove(row)} />];
         })}
       />
-      <Modal open={open} title={editingId ? 'Editar préstamo recibido' : 'Nuevo préstamo recibido'} onClose={() => setOpen(false)}>
+      <Modal open={open} title={editingId ? 'Editar préstamo por pagar' : 'Nuevo préstamo por pagar'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
           <div className="modal-body">
-            <div className="alert alert-warning">Para préstamos antiguos que ya gastaste, marca “antiguo” y registra solo el saldo pendiente. No se moverá ninguna cuenta.</div>
+            <div className="alert alert-warning">Para préstamos antiguos que ya gastaste, marca “antiguo” y registra solo el saldo por pagar. No se moverá ninguna cuenta.</div>
             <label className="check-row">
               <input type="checkbox" checked={form.es_antiguo} onChange={(event) => setForm({ ...form, es_antiguo: event.target.checked, cuenta_ingreso_id: '' })} />
               <span>Préstamo antiguo sin mover saldo actual</span>
             </label>
             <Field label="Acreedor" value={form.acreedor} onChange={(v) => setForm({ ...form, acreedor: v })} placeholder="Banco, familiar, proveedor..." required />
-            <Field label="Descripción" value={form.descripcion} onChange={(v) => setForm({ ...form, descripcion: v })} required />
+            <Field label="Concepto" value={form.descripcion} onChange={(v) => setForm({ ...form, descripcion: v })} required />
             {!form.es_antiguo && (
               <SelectField label="Cuenta donde recibiste el dinero" value={form.cuenta_ingreso_id} onChange={(v) => setForm({ ...form, cuenta_ingreso_id: v })}>
                 <option value="">Seleccionar cuenta...</option>
@@ -140,12 +140,12 @@ export function PrestamosRecibidos({ supabase, user, can = () => true }) {
               </SelectField>
             )}
             <div className="form-row">
-              <Field label="Monto original" type="number" value={form.monto_original} onChange={(v) => setForm({ ...form, monto_original: v, saldo_inicial: form.saldo_inicial || v })} required />
-              <Field label="Saldo pendiente inicial" type="number" value={form.saldo_inicial} onChange={(v) => setForm({ ...form, saldo_inicial: v })} required />
+              <Field label="Importe recibido" type="number" value={form.monto_original} onChange={(v) => setForm({ ...form, monto_original: v, saldo_inicial: form.saldo_inicial || v })} required />
+              <Field label="Saldo por pagar inicial" type="number" value={form.saldo_inicial} onChange={(v) => setForm({ ...form, saldo_inicial: v })} required />
             </div>
             <div className="form-row">
               <Field label="Interés (%)" type="number" value={form.interes} onChange={(v) => setForm({ ...form, interes: v })} />
-              <Field label="Fecha préstamo" type="date" value={form.fecha_inicio} onChange={(v) => setForm({ ...form, fecha_inicio: v })} />
+              <Field label="Fecha del préstamo" type="date" value={form.fecha_inicio} onChange={(v) => setForm({ ...form, fecha_inicio: v })} />
             </div>
             <Field label="Vencimiento" type="date" value={form.fecha_vencimiento} onChange={(v) => setForm({ ...form, fecha_vencimiento: v })} />
             <div className="form-group"><label>Notas</label><textarea value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>

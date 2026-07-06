@@ -70,7 +70,7 @@ export function PagosPrestamosRecibidos({ supabase, user, can = () => true }) {
   }
   async function remove(row) {
     if (!can('delete')) return notify('No tienes permiso para eliminar.');
-    if (!(await confirmAction('Eliminar este pago? Se revertirá el saldo de la cuenta y el pendiente.'))) return;
+    if (!(await confirmAction('Eliminar este pago a acreedor? Se revertirá el saldo de la cuenta y el saldo por pagar.'))) return;
     const { error } = await eliminarPagoPrestamoRecibido(supabase, row.id);
     if (error) return notify(error.message);
     load();
@@ -101,25 +101,25 @@ export function PagosPrestamosRecibidos({ supabase, user, can = () => true }) {
   return (
     <>
       <TableSection
-        title="Pagos de préstamos recibidos"
-        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo pago</button>}
-        columns={['Fecha', 'Acreedor', 'Préstamo', 'Monto', 'Método', 'Cuenta origen']}
+        title="Pagos a acreedores"
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo pago a acreedor</button>}
+        columns={['Fecha', 'Acreedor', 'Préstamo por pagar', 'Importe', 'Método', 'Cuenta origen']}
         rows={pagos.map((p) => [dateFmt(p.fecha), p.prestamos_recibidos?.acreedor || '-', p.prestamos_recibidos?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
       />
-      <Modal open={open} title={editingId ? 'Editar pago de préstamo recibido' : 'Nuevo pago de préstamo recibido'} onClose={() => setOpen(false)}>
+      <Modal open={open} title={editingId ? 'Editar pago a acreedor' : 'Nuevo pago a acreedor'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
           <div className="modal-body">
-            <div className="alert alert-warning">Esta operación descuenta dinero de tu cuenta y reduce el préstamo que debes.</div>
-            <SelectField label="Préstamo recibido" value={form.prestamo_id} onChange={(v) => setForm({ ...form, prestamo_id: v })}>
-              <option value="">Seleccionar préstamo...</option>
-              {prestamosPendientes.map((p) => <option key={p.id} value={p.id}>{p.acreedor} - {p.descripcion} - pendiente {money(Number(p.saldo_inicial || 0) - Number(p.monto_pagado || 0))}</option>)}
+            <div className="alert alert-warning">Esta operación descuenta dinero de tu cuenta y reduce el saldo que debes al acreedor.</div>
+            <SelectField label="Préstamo por pagar" value={form.prestamo_id} onChange={(v) => setForm({ ...form, prestamo_id: v })}>
+              <option value="">Seleccionar préstamo por pagar...</option>
+              {prestamosPendientes.map((p) => <option key={p.id} value={p.id}>{p.acreedor} - {p.descripcion} - saldo {money(Number(p.saldo_inicial || 0) - Number(p.monto_pagado || 0))}</option>)}
             </SelectField>
             <SelectField label="Cuenta origen del pago" value={form.cuenta_id} onChange={(v) => setForm({ ...form, cuenta_id: v })}>
               <option value="">Sin cuenta</option>
               {cuentas.map((c) => <option key={c.id} value={c.id}>{c.banco} - {c.tipo} - {money(c.saldo)}</option>)}
             </SelectField>
             <div className="form-row">
-              <Field label="Monto pagado" type="number" value={form.monto} onChange={(v) => setForm({ ...form, monto: v })} required />
+              <Field label="Importe pagado" type="number" value={form.monto} onChange={(v) => setForm({ ...form, monto: v })} required />
               <Field label="Fecha" type="date" value={form.fecha} onChange={(v) => setForm({ ...form, fecha: v })} required />
             </div>
             <div className="form-row">

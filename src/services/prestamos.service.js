@@ -1,6 +1,5 @@
-import { createEntityService } from './entity.service';
+﻿import { createEntityService } from './entity.service';
 
-export const prestamosOtorgadosService = createEntityService('deudas');
 export const prestamosRecibidosService = createEntityService('prestamos_recibidos');
 export const pagosPrestamosRecibidosService = createEntityService('pagos_prestamos_recibidos');
 
@@ -71,3 +70,4 @@ export function actualizarPagoPrestamoRecibido(supabase, pagoId, payload) {
 export function eliminarPagoPrestamoRecibido(supabase, pagoId) {
   return supabase.rpc('eliminar_pago_prestamo_recibido', { p_pago_id: pagoId });
 }
+

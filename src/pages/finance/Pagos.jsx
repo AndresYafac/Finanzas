@@ -70,7 +70,7 @@ export function Pagos({ supabase, user, isAdmin, can = () => true }) {
   }
   async function remove(pago) {
     if (!can('delete')) return notify('No tienes permiso para eliminar.');
-    if (!(await confirmAction('Eliminar este pago? Se revertira la deuda y el saldo de la cuenta.'))) return;
+    if (!(await confirmAction('Eliminar este cobro? Se revertirá el saldo de la cuenta y la cuenta por cobrar.'))) return;
     const { error } = await eliminarPago(supabase, pago.id);
     if (error) {
       notify(error.message);
@@ -113,25 +113,25 @@ export function Pagos({ supabase, user, isAdmin, can = () => true }) {
   return (
     <>
       <TableSection
-        title="Cobros generales"
-        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Registrar pago</button>}
-        columns={['Fecha', 'Cliente', 'Deuda', 'Monto', 'Método', 'Cuenta']}
+        title="Cobros recibidos"
+        action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo cobro</button>}
+        columns={['Fecha', 'Cliente', 'Cuenta cobrada', 'Importe', 'Método', 'Cuenta destino']}
         rows={pagos.map((p) => [dateFmt(p.fecha), `${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.deudas?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}
       />
-      <Modal open={open} title={editingId ? 'Editar pago' : 'Registrar pago'} onClose={() => setOpen(false)}>
+      <Modal open={open} title={editingId ? 'Editar cobro' : 'Registrar cobro'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
           <div className="modal-body">
             <SelectField label="Cliente" value={form.cliente_id} onChange={(v) => setForm({ ...form, cliente_id: v, deuda_id: '' })}>
               <option value="">Seleccionar cliente...</option>
               {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre} {c.apellido || ''}</option>)}
             </SelectField>
-            <SelectField label="Deuda" value={form.deuda_id} onChange={(v) => setForm({ ...form, deuda_id: v })}>
-              <option value="">Seleccionar deuda...</option>
-              {deudasCliente.map((d) => <option key={d.id} value={d.id}>{d.descripcion} - pendiente {money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}</option>)}
+            <SelectField label="Cuenta por cobrar" value={form.deuda_id} onChange={(v) => setForm({ ...form, deuda_id: v })}>
+              <option value="">Seleccionar cuenta por cobrar...</option>
+              {deudasCliente.map((d) => <option key={d.id} value={d.id}>{d.tipo} - {d.descripcion} - saldo {money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}</option>)}
             </SelectField>
             <div className="form-row">
-              <Field label="Monto pagado" type="number" value={form.monto} onChange={(v) => setForm({ ...form, monto: v })} required />
-              <Field label="Fecha de pago" type="date" value={form.fecha} onChange={(v) => setForm({ ...form, fecha: v })} required />
+              <Field label="Importe cobrado" type="number" value={form.monto} onChange={(v) => setForm({ ...form, monto: v })} required />
+              <Field label="Fecha de cobro" type="date" value={form.fecha} onChange={(v) => setForm({ ...form, fecha: v })} required />
             </div>
             <div className="form-row">
               <SelectField label="Método" value={form.metodo} onChange={(v) => setForm({ ...form, metodo: v })}><option>Efectivo</option><option>Transferencia</option><option>Yape</option><option>Plin</option><option>Depósito</option></SelectField>
@@ -140,7 +140,7 @@ export function Pagos({ supabase, user, isAdmin, can = () => true }) {
             <Field label="Referencia" value={form.referencia} onChange={(v) => setForm({ ...form, referencia: v })} />
             <div className="form-group"><label>Notas</label><textarea value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>
           </div>
-          <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />{editingId ? 'Actualizar pago' : 'Registrar pago'}</button></div>
+          <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />{editingId ? 'Actualizar cobro' : 'Registrar cobro'}</button></div>
         </form>
       </Modal>
     </>

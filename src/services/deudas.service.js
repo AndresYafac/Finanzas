@@ -15,8 +15,9 @@ export function listarDeudasFiltradas(supabase, adminId, filters = {}) {
 
 export function listDeudasViewData(supabase, adminId) {
   return Promise.all([
-    supabase.from('deudas').select('*,clientes(nombre,apellido,user_id)').eq('admin_id', adminId).order('fecha_vencimiento'),
+    supabase.from('deudas').select('*,clientes(nombre,apellido,user_id),cuentas(banco,tipo)').eq('admin_id', adminId).order('fecha_vencimiento'),
     supabase.from('clientes').select('*').eq('admin_id', adminId).order('nombre'),
+    supabase.from('cuentas').select('*').eq('admin_id', adminId).order('banco'),
   ]);
 }
 
@@ -30,4 +31,16 @@ export function updateDeuda(supabase, adminId, id, payload) {
 
 export function deleteDeuda(supabase, adminId, id) {
   return supabase.from('deudas').delete().eq('id', id).eq('admin_id', adminId);
+}
+
+export function registrarDeudaConDesembolso(supabase, payload) {
+  return supabase.rpc('registrar_deuda_con_desembolso', payload);
+}
+
+export function actualizarPrestamoPorCobrar(supabase, deudaId, payload) {
+  return supabase.rpc('actualizar_prestamo', { p_deuda_id: deudaId, ...payload });
+}
+
+export function eliminarPrestamoPorCobrar(supabase, deudaId) {
+  return supabase.rpc('eliminar_prestamo', { p_deuda_id: deudaId });
 }

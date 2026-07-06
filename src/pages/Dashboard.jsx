@@ -7,9 +7,9 @@ import { calcEstado, dateFmt, money, month } from '../utils/format';
 const DASHBOARD_CARDS_KEY = 'fintrack_dashboard_cards';
 const DASHBOARD_CARD_OPTIONS = [
   { id: 'balance', label: 'Balance de cuentas', description: 'Saldo total y distribución por cuenta.', Icon: Wallet },
-  { id: 'pendiente', label: 'Pendiente por cobrar', description: 'Deudas activas y monto pendiente.', Icon: CreditCard },
+  { id: 'pendiente', label: 'Cuentas por cobrar', description: 'Importe pendiente de cobro.', Icon: CreditCard },
   { id: 'pagos', label: 'Cobros del mes', description: 'Cobros registrados durante el mes actual.', Icon: Banknote },
-  { id: 'movimientos', label: 'Ingresos / Egresos', description: 'Resumen general de movimientos.', Icon: TrendingUp },
+  { id: 'movimientos', label: 'Ingresos y egresos', description: 'Resumen general de movimientos.', Icon: TrendingUp },
 ];
 const DEFAULT_DASHBOARD_CARDS = DASHBOARD_CARD_OPTIONS.map((item) => item.id);
 
@@ -103,7 +103,7 @@ export function Dashboard({ supabase, user, isAdmin }) {
   const accountChart = data.cuentas.map((cuenta) => ({ label: cuenta.banco, value: Number(cuenta.saldo || 0) }));
   const debtChart = [
     { label: 'Cobrado', value: cobradoDeudas },
-    { label: 'Pendiente', value: pendiente },
+    { label: 'Saldo por cobrar', value: pendiente },
   ];
   const paymentsChart = Object.entries(pagosPorDia).slice(-8).map(([label, value]) => ({ label, value }));
   const movementChart = [
@@ -133,14 +133,14 @@ export function Dashboard({ supabase, user, isAdmin }) {
       </div>
       <div className="metrics-grid">
         {isVisible('balance') && <MetricCard icon={<Wallet />} label="Balance cuentas" value={money(balanceTotal)} helper={`${data.cuentas.length} cuentas activas`} chart={<MiniBarChart items={accountChart} />} />}
-        {isVisible('pendiente') && <MetricCard icon={<CreditCard />} label="Pendiente por cobrar" value={money(pendiente)} helper={`${data.deudas.filter((deuda) => calcEstado(deuda) !== 'pagado').length} pendientes activos`} danger chart={<MiniBarChart items={debtChart} danger />} />}
+        {isVisible('pendiente') && <MetricCard icon={<CreditCard />} label="Cuentas por cobrar" value={money(pendiente)} helper={`${data.deudas.filter((deuda) => calcEstado(deuda) !== 'pagado').length} cuentas activas`} danger chart={<MiniBarChart items={debtChart} danger />} />}
         {isVisible('pagos') && <MetricCard icon={<Banknote />} label="Cobros del mes" value={money(pagosMes)} helper={`${data.pagos.filter((pago) => pago.fecha?.startsWith(month())).length} cobros`} chart={<MiniBarChart items={paymentsChart} />} />}
-        {isVisible('movimientos') && <MetricCard icon={<TrendingUp />} label="Ingresos / Egresos" value={`${money(ingresos)} / ${money(egresos)}`} helper="Movimientos generales" chart={<MiniBarChart items={movementChart} split />} />}
+        {isVisible('movimientos') && <MetricCard icon={<TrendingUp />} label="Ingresos y egresos" value={`${money(ingresos)} / ${money(egresos)}`} helper="Movimientos generales" chart={<MiniBarChart items={movementChart} split />} />}
       </div>
       {!visibleCards.length && <Card className="empty-dashboard"><div className="card-body muted">Activa al menos una tarjeta desde Configurar dashboard.</div></Card>}
       <div className="grid-2">
-        <ListCard title="Pendientes por vencer" empty="Sin pendientes por vencer" items={porVencer.map((deuda) => `${deuda.clientes?.nombre || ''} - ${deuda.descripcion}: ${money(Number(deuda.monto_total || 0) - Number(deuda.monto_pagado || 0))}`)} />
-        <ListCard title="Últimos cobros registrados" empty="Sin cobros registrados" items={data.pagos.slice(0, 5).map((pago) => `${dateFmt(pago.fecha)} - ${pago.clientes?.nombre || ''}: ${money(pago.monto)}`)} />
+        <ListCard title="Cuentas por cobrar por vencer" empty="Sin cuentas por cobrar por vencer" items={porVencer.map((deuda) => `${deuda.clientes?.nombre || ''} - ${deuda.descripcion}: ${money(Number(deuda.monto_total || 0) - Number(deuda.monto_pagado || 0))}`)} />
+        <ListCard title="Últimos cobros recibidos" empty="Sin cobros registrados" items={data.pagos.slice(0, 5).map((pago) => `${dateFmt(pago.fecha)} - ${pago.clientes?.nombre || ''}: ${money(pago.monto)}`)} />
       </div>
       <div className="grid-2 dashboard-extra">
         <ListCard title="Alertas de presupuesto" empty="Sin presupuestos en alerta" items={presupuestoAlerts.map((presupuesto) => `${presupuesto.label}: ${money(presupuesto.usado)} de ${money(presupuesto.limite)} (${presupuesto.pct}%)`)} />
@@ -181,3 +181,4 @@ export function Dashboard({ supabase, user, isAdmin }) {
     </>
   );
 }
+

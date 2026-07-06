@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   BarChart3,
@@ -20,7 +20,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { createStoredClient } from './config/supabase';
-import { applyVisualConfig, getCompanyConfig } from './config/visualConfig';
+import { applyVisualConfig, getCompanyConfig, getVisualConfig } from './config/visualConfig';
 import { LOCKED_KEY, REMEMBER_KEY } from './constants/authStorage';
 import { clearRememberedAccount } from './controllers/auth.controller';
 import { Auth, PinUnlock } from './components/auth/Auth';
@@ -43,8 +43,6 @@ const Perfil = lazyPage(() => import('./pages/Perfil'), 'Perfil');
 const Clientes = lazyPage(() => import('./pages/finance/Clientes'), 'Clientes');
 const Cuentas = lazyPage(() => import('./pages/finance/Cuentas'), 'Cuentas');
 const Deudas = lazyPage(() => import('./pages/finance/Deudas'), 'Deudas');
-const Prestamos = lazyPage(() => import('./pages/finance/Prestamos'), 'Prestamos');
-const CobrosPrestamos = lazyPage(() => import('./pages/finance/CobrosPrestamos'), 'CobrosPrestamos');
 const PrestamosRecibidos = lazyPage(() => import('./pages/finance/PrestamosRecibidos'), 'PrestamosRecibidos');
 const PagosPrestamosRecibidos = lazyPage(() => import('./pages/finance/PagosPrestamosRecibidos'), 'PagosPrestamosRecibidos');
 const Pagos = lazyPage(() => import('./pages/finance/Pagos'), 'Pagos');
@@ -64,8 +62,6 @@ const PAGE_IDS = [
   'clientes',
   'cuentas',
   'deudas',
-  'prestamos',
-  'cobros-prestamos',
   'prestamos-recibidos',
   'pagos-prestamos-recibidos',
   'pagos',
@@ -117,11 +113,11 @@ function App() {
   }, []);
 
   React.useEffect(() => {
-    const syncVisualConfig = () => applyVisualConfig();
+    const syncVisualConfig = () => applyVisualConfig(getVisualConfig(session?.user?.id));
     syncVisualConfig();
     window.addEventListener('fintrack_visual_config', syncVisualConfig);
     return () => window.removeEventListener('fintrack_visual_config', syncVisualConfig);
-  }, []);
+  }, [session?.user?.id]);
 
   React.useEffect(() => {
     const onBeforeInstallPrompt = (event) => {
@@ -292,15 +288,19 @@ function App() {
       ['dashboard', 'Dashboard', LayoutDashboard, can('dashboard')],
       ['clientes', 'Clientes', Users, can('clientes')],
     ]],
-    ['finanzas', [
-      ['cuentas', 'Cuentas bancarias', Building2, can('cuentas')],
-      ['deudas', 'Pendientes por cobrar', CreditCard, can('deudas')],
-      ['prestamos', 'Préstamos otorgados', TrendingDown, can('prestamos')],
-      ['cobros-prestamos', 'Cobros de préstamos', TrendingUp, can('cobros-prestamos')],
-      ['prestamos-recibidos', 'Préstamos recibidos', Banknote, can('prestamos-recibidos')],
-      ['pagos-prestamos-recibidos', 'Pagos de préstamos', TrendingDown, can('pagos-prestamos-recibidos')],
-      ['pagos', 'Cobros generales', Banknote, can('pagos')],
-      ['movimientos', 'Ingresos / Egresos', Wallet, can('movimientos')],
+    ['dinero', [
+      ['cuentas', 'Cuentas y caja', Building2, can('cuentas')],
+      ['movimientos', 'Movimientos de caja', Wallet, can('movimientos')],
+    ]],
+    ['cobros', [
+      ['deudas', 'Cuentas por cobrar', CreditCard, can('deudas')],
+      ['pagos', 'Cobros recibidos', Banknote, can('pagos')],
+    ]],
+    ['por pagar', [
+      ['prestamos-recibidos', 'Préstamos por pagar', Banknote, can('prestamos-recibidos')],
+      ['pagos-prestamos-recibidos', 'Pagos a acreedores', TrendingDown, can('pagos-prestamos-recibidos')],
+    ]],
+    ['planificación', [
       ['presupuestos', 'Presupuestos', ClipboardList, can('presupuestos')],
       ['metas', 'Metas', Target, can('metas')],
     ]],
@@ -370,8 +370,6 @@ function App() {
         {page === 'clientes' && <Clientes supabase={supabase} user={session.user} can={(action) => can('clientes', action)} />}
         {page === 'cuentas' && <Cuentas supabase={supabase} user={session.user} can={(action) => can('cuentas', action)} />}
         {page === 'deudas' && <Deudas supabase={supabase} user={session.user} isAdmin={isAdmin} can={(action) => can('deudas', action)} />}
-        {page === 'prestamos' && <Prestamos supabase={supabase} user={session.user} can={(action) => can('prestamos', action)} />}
-        {page === 'cobros-prestamos' && <CobrosPrestamos supabase={supabase} user={session.user} can={(action) => can('cobros-prestamos', action)} />}
         {page === 'prestamos-recibidos' && <PrestamosRecibidos supabase={supabase} user={session.user} can={(action) => can('prestamos-recibidos', action)} />}
         {page === 'pagos-prestamos-recibidos' && <PagosPrestamosRecibidos supabase={supabase} user={session.user} can={(action) => can('pagos-prestamos-recibidos', action)} />}
         {page === 'pagos' && <Pagos supabase={supabase} user={session.user} isAdmin={isAdmin} can={(action) => can('pagos', action)} />}
@@ -439,14 +437,12 @@ function pageTitle(page, isAdmin) {
   const labels = {
     dashboard: ['Dashboard', 'Resumen general de finanzas'],
     clientes: ['Clientes', 'Personas registradas por el administrador'],
-    cuentas: ['Cuentas bancarias', 'Administra tus cuentas y billeteras'],
-    deudas: ['Pendientes por cobrar', 'Deudas que tus clientes tienen contigo'],
-    prestamos: ['Préstamos otorgados', 'Dinero que prestas a clientes'],
-    'cobros-prestamos': ['Cobros de préstamos otorgados', 'Pagos recibidos por préstamos que diste'],
-    'prestamos-recibidos': ['Préstamos recibidos', 'Dinero que te prestaron a ti'],
-    'pagos-prestamos-recibidos': ['Pagos de préstamos recibidos', 'Cuotas que pagas a tus acreedores'],
-    pagos: ['Cobros generales', 'Pagos recibidos por ventas, servicios o pendientes'],
-    movimientos: ['Ingresos y egresos', 'Movimientos generales de caja'],
+    cuentas: ['Cuentas y caja', 'Administra tus cuentas bancarias y billeteras'],
+    deudas: ['Cuentas por cobrar', 'Ventas, servicios y préstamos que deben pagarte'],
+    'prestamos-recibidos': ['Préstamos por pagar', 'Dinero que te prestaron y aún debes'],
+    'pagos-prestamos-recibidos': ['Pagos a acreedores', 'Pagos realizados por préstamos que debes'],
+    pagos: ['Cobros recibidos', 'Dinero recibido de clientes o deudores'],
+    movimientos: ['Movimientos de caja', 'Ingresos y egresos generales'],
     presupuestos: ['Presupuestos', 'Control mensual por categoría'],
     metas: ['Metas financieras', 'Objetivos de ahorro y crecimiento'],
     reportes: ['Reportes', 'Análisis financiero'],
@@ -524,7 +520,7 @@ function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
       const debtAlerts = alertData.deudas
         .filter((d) => calcEstado(d) === 'vencido' || calcEstado(d) === 'por_vencer')
         .slice(0, 5)
-        .map((d) => ({ page: d.tipo === 'Préstamo' ? 'prestamos' : 'deudas', level: calcEstado(d) === 'vencido' ? 'danger' : 'warning', title: calcEstado(d) === 'vencido' ? 'Pendiente vencido' : 'Pendiente por vencer', text: `${d.descripcion || 'Sin descripción'} · ${money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}` }));
+        .map((d) => ({ page: 'deudas', level: calcEstado(d) === 'vencido' ? 'danger' : 'warning', title: calcEstado(d) === 'vencido' ? 'Cuenta por cobrar vencida' : 'Cuenta por cobrar por vencer', text: `${d.descripcion || 'Sin descripción'} · ${money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}` }));
       const budgetAlerts = alertData.presupuestos.map((p) => {
         const used = alertData.movimientos
           .filter((m) => m.tipo === p.tipo && ((p.tipo_movimiento_id && m.tipo_movimiento_id === p.tipo_movimiento_id) || (!p.tipo_movimiento_id && (m.categoria || '') === (p.categoria || ''))))
@@ -548,7 +544,7 @@ function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
       const receivedLoanAlerts = alertData.prestamosRecibidos
         .filter((p) => p.fecha_vencimiento && (calcEstado({ fecha_vencimiento: p.fecha_vencimiento, monto_total: p.saldo_inicial || p.monto_original, monto_pagado: p.monto_pagado }) !== 'al_dia'))
         .slice(0, 4)
-        .map((p) => ({ page: 'prestamos-recibidos', level: 'warning', title: 'Préstamo recibido por pagar', text: `${p.acreedor || p.descripcion || 'Acreedor'}: ${money(Number(p.saldo_inicial || p.monto_original || 0) - Number(p.monto_pagado || 0))}` }));
+        .map((p) => ({ page: 'prestamos-recibidos', level: 'warning', title: 'Préstamo por pagar', text: `${p.acreedor || p.descripcion || 'Acreedor'}: ${money(Number(p.saldo_inicial || p.monto_original || 0) - Number(p.monto_pagado || 0))}` }));
       setAlerts([...debtAlerts, ...budgetAlerts, ...goalAlerts, ...lowBalanceAlerts, ...receivedLoanAlerts]);
     }
     load();

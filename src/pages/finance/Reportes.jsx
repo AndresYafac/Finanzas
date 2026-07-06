@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import {
   ArrowRightLeft,
   Building2,
@@ -82,10 +82,10 @@ export function Reportes({ supabase, user, can = () => true }) {
     if (!can('export')) return notify('No tienes permiso para exportar.');
     const csvRows = Object.entries(summary).map(([cliente, r]) => ({
       cliente,
-      deuda_total: Number(r.total || 0).toFixed(2),
+      cuenta_por_cobrar_total: Number(r.total || 0).toFixed(2),
       pagado: Number(r.pagado || 0).toFixed(2),
-      pendiente: Number((r.total || 0) - (r.pagado || 0)).toFixed(2),
-      estado: r.total - r.pagado <= 0 ? 'Pagado' : 'Pendiente',
+      saldo_por_cobrar: Number((r.total || 0) - (r.pagado || 0)).toFixed(2),
+      estado: r.total - r.pagado <= 0 ? 'Cobrado' : 'Saldo por cobrar',
     }));
     downloadText(`fintrack-resumen-clientes-${today()}.csv`, toCsv(csvRows), 'text/csv');
   };
@@ -102,7 +102,7 @@ export function Reportes({ supabase, user, can = () => true }) {
     if (!can('export')) return notify('No tienes permiso para exportar.');
     return downloadText(`fintrack-reporte-${today()}.json`, JSON.stringify({
       filtros: filters,
-      pendientes: summary,
+      cuentas_por_cobrar: summary,
       movimientos: Object.values(movimientosPorTipo),
       presupuestos,
       metas,
@@ -152,7 +152,7 @@ export function Reportes({ supabase, user, can = () => true }) {
             <div class="card"><div class="label">Metas activas</div><div class="value">${metas.filter((m) => m.estado === 'activa').length}</div></div>
           </div>
           <h2>Resumen por cliente</h2>
-          <table><thead><tr><th>Cliente</th><th>Deuda total</th><th>Pagado</th><th>Pendiente</th></tr></thead><tbody>
+          <table><thead><tr><th>Cliente</th><th>Total por cobrar</th><th>Cobrado</th><th>Saldo por cobrar</th></tr></thead><tbody>
             ${Object.entries(summary).map(([cliente, r]) => `<tr><td>${escapeHtml(cliente)}</td><td>${escapeHtml(money(r.total))}</td><td>${escapeHtml(money(r.pagado))}</td><td>${escapeHtml(money(r.total - r.pagado))}</td></tr>`).join('') || '<tr><td colspan="4">Sin datos</td></tr>'}
           </tbody></table>
           <h2>Ingresos y egresos por tipo</h2>
@@ -207,10 +207,11 @@ export function Reportes({ supabase, user, can = () => true }) {
         <MetricCard icon={<Target />} label="Metas activas" value={metas.filter((m) => m.estado === 'activa').length} helper={`${metas.length} metas registradas`} />
       </div>
       <div className="action-bar"><div /><div className="table-actions">{can('export') && <button className="btn" onClick={exportPdf}><FileDown size={16} />Exportar PDF</button>}{can('export') && <button className="btn btn-primary" onClick={exportResumen}><FileDown size={16} />Exportar reporte JSON</button>}</div></div>
-      <TableSection title="Resumen por cliente" columns={['Cliente', 'Deuda total', 'Pagado', 'Pendiente', 'Estado']} rows={tableRows} onExport={can('export') ? exportClientesCsv : null} />
+      <TableSection title="Resumen por cliente" columns={['Cliente', 'Total por cobrar', 'Cobrado', 'Saldo por cobrar', 'Estado']} rows={tableRows} onExport={can('export') ? exportClientesCsv : null} />
       <div className="report-spacer" />
       <TableSection title="Ingresos y egresos por tipo" columns={['Tipo', 'Categoría', 'Total']} rows={Object.values(movimientosPorTipo).map((row) => [badge(row.tipo), row.categoria, money(row.total)])} />
     </>
   );
 }
+
 

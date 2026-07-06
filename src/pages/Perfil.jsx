@@ -5,6 +5,7 @@ import { updateMobilePin, updateProfile } from '../controllers/profile.controlle
 import { confirmAction } from '../services/feedback';
 import { getPasswordStrength, validatePassword } from '../utils/password';
 import { Button, Card, Field, FormActions, SelectField } from '../components/ui';
+import { AppearanceSettings } from '../components/AppearanceSettings';
 
 function initials(profile, email) {
   return ((profile?.nombre?.[0] || '') + (profile?.apellido?.[0] || '')).toUpperCase() || email?.[0]?.toUpperCase() || '?';
@@ -107,66 +108,97 @@ export function Perfil({ supabase, user, profile, onSaved }) {
     <div className="profile-section">
       <Card title="Información personal" className="profile-main-card">
         <form className="card-body" onSubmit={save}>
-          <div className="avatar-upload"><div className="avatar-big">{initials(profile, user.email)}</div><div><div className="profile-name">{fullName(profile) || user.email}</div><div className="muted">{user.email}</div><div className="role-text">{profile?.role === 'admin' ? 'Administrador' : 'Usuario'}</div></div></div>
-          <div className="form-row"><Field label="Nombre" value={form.nombre} onChange={(value) => setForm({ ...form, nombre: value })} /><Field label="Apellido" value={form.apellido} onChange={(value) => setForm({ ...form, apellido: value })} /></div>
+          <div className="avatar-upload">
+            <div className="avatar-big">{initials(profile, user.email)}</div>
+            <div>
+              <div className="profile-name">{fullName(profile) || user.email}</div>
+              <div className="muted">{user.email}</div>
+              <div className="role-text">{profile?.role === 'admin' ? 'Administrador' : 'Usuario'}</div>
+            </div>
+          </div>
           <div className="form-row">
-            <SelectField label="Tipo de documento" value={form.tipo_doc} onChange={(value) => setForm({ ...form, tipo_doc: value })}><option>DNI</option><option>RUC</option><option>CE</option><option>Pasaporte</option></SelectField>
+            <Field label="Nombre" value={form.nombre} onChange={(value) => setForm({ ...form, nombre: value })} />
+            <Field label="Apellido" value={form.apellido} onChange={(value) => setForm({ ...form, apellido: value })} />
+          </div>
+          <div className="form-row">
+            <SelectField label="Tipo de documento" value={form.tipo_doc} onChange={(value) => setForm({ ...form, tipo_doc: value })}>
+              <option>DNI</option>
+              <option>RUC</option>
+              <option>CE</option>
+              <option>Pasaporte</option>
+            </SelectField>
             <Field label="Documento" value={form.documento} onChange={(value) => setForm({ ...form, documento: value })} />
           </div>
           <Field label="Email de contacto" type="email" value={form.email_contacto} onChange={(value) => setForm({ ...form, email_contacto: value })} />
           <Field label="Teléfono" value={form.telefono} onChange={(value) => setForm({ ...form, telefono: value })} />
           <Field label="Dirección" value={form.direccion} onChange={(value) => setForm({ ...form, direccion: value })} />
           <Field label="Empresa / Negocio" value={form.empresa} onChange={(value) => setForm({ ...form, empresa: value })} />
-          <SelectField label="Moneda predeterminada" value={form.moneda} onChange={(value) => setForm({ ...form, moneda: value })}><option value="PEN">Soles (S/)</option><option value="USD">Dólares ($)</option><option value="EUR">Euros (€)</option></SelectField>
+          <SelectField label="Moneda predeterminada" value={form.moneda} onChange={(value) => setForm({ ...form, moneda: value })}>
+            <option value="PEN">Soles (S/)</option>
+            <option value="USD">Dólares ($)</option>
+            <option value="EUR">Euros (EUR)</option>
+          </SelectField>
           {status && <div className={`connection-status ${status.includes('correctamente') ? 'success' : ''}`}>{status}</div>}
           <FormActions><Button variant="primary" type="submit"><Check size={16} />Guardar cambios</Button></FormActions>
         </form>
       </Card>
 
       <div className="profile-side">
-        <Card title="PIN móvil" className="pin-card">
-          <form className="card-body" onSubmit={savePin}>
-            <p className="muted">Crea un PIN de 6 dígitos para desbloquear la app en este celular cuando uses “Recordar cuenta”.</p>
-            <div className="form-row">
-              <Field label="Nuevo PIN" type="password" value={pinForm.pin} onChange={(value) => setPinField('pin', value)} inputMode="numeric" pattern="\d{6}" placeholder="------" required minLength={6} />
-              <Field label="Confirmar PIN" type="password" value={pinForm.confirm} onChange={(value) => setPinField('confirm', value)} inputMode="numeric" pattern="\d{6}" placeholder="------" required minLength={6} />
-            </div>
-            {pinStatus && <div className={`connection-status ${pinStatus.includes('correctamente') ? 'success' : ''}`}>{pinStatus}</div>}
-            <FormActions><Button variant="primary" type="submit"><Check size={16} />{profile?.pin_hash ? 'Cambiar PIN' : 'Crear PIN'}</Button></FormActions>
-          </form>
+        <Card title="Seguridad" className="security-card">
+          <div className="card-body security-stack">
+            <form className="security-form" onSubmit={savePin}>
+              <div className="security-block-head">
+                <h4>PIN móvil</h4>
+                <p className="muted">Crea un PIN de 6 dígitos para desbloquear la app en este celular cuando uses Recordar cuenta.</p>
+              </div>
+              <div className="form-row">
+                <Field label="Nuevo PIN" type="password" value={pinForm.pin} onChange={(value) => setPinField('pin', value)} inputMode="numeric" pattern="\d{6}" placeholder="------" required minLength={6} />
+                <Field label="Confirmar PIN" type="password" value={pinForm.confirm} onChange={(value) => setPinField('confirm', value)} inputMode="numeric" pattern="\d{6}" placeholder="------" required minLength={6} />
+              </div>
+              {pinStatus && <div className={`connection-status ${pinStatus.includes('correctamente') ? 'success' : ''}`}>{pinStatus}</div>}
+              <FormActions><Button variant="primary" type="submit"><Check size={16} />{profile?.pin_hash ? 'Cambiar PIN' : 'Crear PIN'}</Button></FormActions>
+            </form>
+
+            <div className="security-divider" />
+
+            <form className="security-form" onSubmit={savePassword}>
+              <div className="security-block-head">
+                <h4>Contraseña</h4>
+                <p className="muted">Cambia la contraseña con la que inicias sesión por correo. El cambio aplica a tu cuenta de Supabase Auth.</p>
+              </div>
+              <Field
+                label="Nueva contraseña"
+                type={showProfilePassword ? 'text' : 'password'}
+                value={passwordForm.password}
+                onChange={(value) => setPasswordForm({ ...passwordForm, password: value })}
+                required
+                minLength={8}
+                rightElement={<button className="input-action" type="button" onClick={() => setShowProfilePassword((value) => !value)}>{showProfilePassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
+              />
+              <div className={`password-strength password-strength-${profilePasswordStrength.label.toLowerCase()}`}>
+                <div className="password-strength-head">
+                  <span>Seguridad de contraseña</span>
+                  <strong>{profilePasswordStrength.label}</strong>
+                </div>
+                <div className="password-strength-track"><i style={{ width: `${profilePasswordStrength.score}%` }} /></div>
+                <div className="password-checks">
+                  {profilePasswordStrength.checks.map(([key, label, ok]) => (
+                    <span key={key} className={ok ? 'ok' : ''}>{ok ? '✓' : '•'} {label}</span>
+                  ))}
+                </div>
+              </div>
+              <Field label="Confirmar contraseña" type={showProfilePassword ? 'text' : 'password'} value={passwordForm.confirm} onChange={(value) => setPasswordForm({ ...passwordForm, confirm: value })} required minLength={8} />
+              {passwordStatus && <div className={`connection-status ${passwordStatus.includes('correctamente') ? 'success' : ''}`}>{passwordStatus}</div>}
+              <FormActions>
+                <Button variant="primary" type="submit"><Check size={16} />Cambiar contraseña</Button>
+                <Button variant="danger" onClick={signOutEverywhere}><LogOut size={16} />Cerrar sesión en todos</Button>
+              </FormActions>
+            </form>
+          </div>
         </Card>
 
-        <Card title="Contraseña" className="pin-card">
-          <form className="card-body" onSubmit={savePassword}>
-            <p className="muted">Cambia la contraseña con la que inicias sesión por correo. El cambio aplica a tu cuenta de Supabase Auth.</p>
-            <Field
-              label="Nueva contraseña"
-              type={showProfilePassword ? 'text' : 'password'}
-              value={passwordForm.password}
-              onChange={(value) => setPasswordForm({ ...passwordForm, password: value })}
-              required
-              minLength={8}
-              rightElement={<button className="input-action" type="button" onClick={() => setShowProfilePassword((value) => !value)}>{showProfilePassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
-            />
-            <div className={`password-strength password-strength-${profilePasswordStrength.label.toLowerCase()}`}>
-              <div className="password-strength-head">
-                <span>Seguridad de contraseña</span>
-                <strong>{profilePasswordStrength.label}</strong>
-              </div>
-              <div className="password-strength-track"><i style={{ width: `${profilePasswordStrength.score}%` }} /></div>
-              <div className="password-checks">
-                {profilePasswordStrength.checks.map(([key, label, ok]) => (
-                  <span key={key} className={ok ? 'ok' : ''}>{ok ? '✓' : '•'} {label}</span>
-                ))}
-              </div>
-            </div>
-            <Field label="Confirmar contraseña" type={showProfilePassword ? 'text' : 'password'} value={passwordForm.confirm} onChange={(value) => setPasswordForm({ ...passwordForm, confirm: value })} required minLength={8} />
-            {passwordStatus && <div className={`connection-status ${passwordStatus.includes('correctamente') ? 'success' : ''}`}>{passwordStatus}</div>}
-            <FormActions>
-              <Button variant="primary" type="submit"><Check size={16} />Cambiar contraseña</Button>
-              <Button variant="danger" onClick={signOutEverywhere}><LogOut size={16} />Cerrar sesión en todos</Button>
-            </FormActions>
-          </form>
+        <Card title="Apariencia" className="appearance-card">
+          <AppearanceSettings userId={user.id} onStatus={setStatus} />
         </Card>
       </div>
     </div>

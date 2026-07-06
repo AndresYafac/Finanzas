@@ -13,8 +13,9 @@ export async function globalSearch(supabase, adminId, rawTerm) {
   return [
     ...(clientes.data || []).map((row) => ({ page: 'clientes', title: `${row.nombre || ''} ${row.apellido || ''}`.trim() || 'Cliente', meta: row.email || row.telefono || 'Cliente', type: 'Cliente' })),
     ...(cuentas.data || []).map((row) => ({ page: 'cuentas', title: row.banco || 'Cuenta', meta: `${row.tipo || '-'} · ${row.moneda || 'PEN'}`, type: 'Cuenta' })),
-    ...(deudas.data || []).map((row) => ({ page: row.tipo === 'Préstamo' ? 'prestamos' : 'deudas', title: row.descripcion || row.tipo || 'Pendiente', meta: `${row.clientes?.nombre || ''} ${row.clientes?.apellido || ''}`.trim(), type: row.tipo === 'Préstamo' ? 'Préstamo' : 'Pendiente' })),
+    ...(deudas.data || []).map((row) => ({ page: 'deudas', title: row.descripcion || row.tipo || 'Cuenta por cobrar', meta: `${row.clientes?.nombre || ''} ${row.clientes?.apellido || ''}`.trim(), type: row.tipo === 'Préstamo' ? 'Préstamo por cobrar' : 'Cuenta por cobrar' })),
     ...(pagos.data || []).map((row) => ({ page: 'pagos', title: row.referencia || row.metodo || 'Cobro', meta: `${row.clientes?.nombre || ''} ${row.clientes?.apellido || ''}`.trim(), type: 'Cobro' })),
     ...(movimientos.data || []).map((row) => ({ page: 'movimientos', title: row.descripcion || row.categoria || 'Movimiento', meta: row.tipo, type: 'Movimiento' })),
   ].slice(0, 8);
 }
+

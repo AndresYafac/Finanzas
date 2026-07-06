@@ -7,7 +7,15 @@ export function testSupabaseConnection(client) {
 }
 
 export async function saveEmpresaConfig(client, adminId, company) {
-  const payload = { admin_id: adminId, ...company, updated_at: new Date().toISOString() };
+  const payload = {
+    admin_id: adminId,
+    nombre: company.nombre,
+    documento: company.documento,
+    direccion: company.direccion,
+    telefono: company.telefono,
+    logo_url: company.logo_url,
+    updated_at: new Date().toISOString(),
+  };
   const result = await client
     .from('empresa_config')
     .upsert(payload, { onConflict: 'admin_id' });
@@ -23,8 +31,6 @@ export async function saveEmpresaConfig(client, adminId, company) {
     direccion: company.direccion,
     telefono: company.telefono,
     logo_url: company.logo_url,
-    primary_color: company.primary_color,
-    theme: company.theme,
     updated_at: payload.updated_at,
   };
 

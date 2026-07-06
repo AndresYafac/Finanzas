@@ -232,6 +232,19 @@
   font-weight: 800;
 }
 
+.table-toolbar-inline {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.table-toolbar-inline .form-group {
+  min-width: 220px;
+  margin-bottom: 0;
+}
+
 .preview-bars {
   display: grid;
   gap: 9px;
@@ -965,19 +978,87 @@ textarea:focus {
 }
 
 .page-perfil .profile-section {
-  width: min(1120px, 100%);
+  width: min(1760px, 100%);
   max-width: none;
   display: grid;
-  grid-template-columns: minmax(0, 670px) minmax(320px, 390px);
+  grid-template-columns: minmax(520px, 660px) minmax(390px, 480px) minmax(430px, 560px);
   gap: 22px;
   align-items: start;
   justify-content: center;
 }
 
 .profile-side {
-  display: grid;
+  display: contents;
   gap: 22px;
   align-content: start;
+}
+
+.page-perfil .pin-card,
+.page-perfil .security-card {
+  margin-top: 0;
+}
+
+.page-perfil .profile-side > .security-card {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.page-perfil .profile-side > .appearance-card {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.security-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.security-form {
+  display: grid;
+  gap: 14px;
+}
+
+.security-block-head h4 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.security-block-head .muted {
+  line-height: 1.35;
+}
+
+.security-divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.page-perfil .appearance-card .theme-preset-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.page-perfil .appearance-card .theme-live-preview {
+  grid-template-columns: minmax(0, 1fr) 150px;
+}
+
+@media (max-width: 1360px) {
+  .page-perfil .profile-section {
+    width: min(1120px, 100%);
+    grid-template-columns: minmax(0, 670px) minmax(320px, 390px);
+  }
+
+  .page-perfil .profile-side {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 22px;
+    align-content: start;
+  }
+
+  .page-perfil .profile-side > .security-card,
+  .page-perfil .profile-side > .appearance-card {
+    grid-column: auto;
+    grid-row: auto;
+  }
 }
 
 .btn {

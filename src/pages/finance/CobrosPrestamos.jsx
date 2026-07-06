@@ -108,7 +108,7 @@ export function CobrosPrestamos({ supabase, user, can = () => true }) {
   return (
     <>
       <TableSection
-        title="Cobros de préstamos otorgados"
+        title="Cobrar préstamo otorgado"
         action={can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Registrar cobro</button>}
         columns={['Fecha', 'Cliente', 'Préstamo', 'Monto', 'Método', 'Cuenta destino']}
         rows={pagos.map((p) => [dateFmt(p.fecha), `${p.clientes?.nombre || ''} ${p.clientes?.apellido || ''}`, p.deudas?.descripcion || '-', money(p.monto), p.metodo, p.cuentas?.banco || '-', <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(p)} onDelete={() => remove(p)} />])}

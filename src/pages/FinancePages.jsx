@@ -1,8 +1,6 @@
 ﻿export { Clientes } from './finance/Clientes';
 export { Cuentas } from './finance/Cuentas';
 export { Deudas } from './finance/Deudas';
-export { Prestamos } from './finance/Prestamos';
-export { CobrosPrestamos } from './finance/CobrosPrestamos';
 export { PrestamosRecibidos } from './finance/PrestamosRecibidos';
 export { PagosPrestamosRecibidos } from './finance/PagosPrestamosRecibidos';
 export { Pagos } from './finance/Pagos';
