@@ -104,10 +104,10 @@ export function UsuariosAdmin({ supabase, user }) {
   }
   async function remove(row) {
     if (row.id === user.id) return notify('No puedes eliminar tu propio usuario.');
-    if (!(await confirmAction(`Eliminar usuario ${row.email_contacto || row.nombre || ''}? Esto lo desactivará y ocultará su acceso.`))) return;
+    if (!(await confirmAction(`Eliminar definitivamente el usuario ${row.email_contacto || row.nombre || ''}? Esta accion borrara su cuenta de acceso y no se puede deshacer.`))) return;
     const { error } = await deleteAdminUser(supabase, row.id);
     if (error) return notify(error.message);
-    notify('Usuario eliminado lógicamente.', 'success');
+    notify('Usuario eliminado definitivamente.', 'success');
     load();
   }
   async function openPermissions(row) {

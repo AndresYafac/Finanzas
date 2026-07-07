@@ -53,6 +53,7 @@ export function Metas({ supabase, user, can = () => true }) {
     const { error } = await deleteMeta(supabase, user.id, row.id);
     if (error) return notify(error.message);
     await logAudit(supabase, user.id, 'metas', 'delete', 'Meta eliminada', row.id, row);
+    notify('Meta eliminada correctamente.', 'success');
     load();
   }
   async function save(event) {
@@ -68,6 +69,7 @@ export function Metas({ supabase, user, can = () => true }) {
     setOpen(false);
     setEditingId(null);
     setForm(emptyForm);
+    notify(editingId ? 'Meta actualizada correctamente.' : 'Meta creada correctamente.', 'success');
     load();
   }
   return (

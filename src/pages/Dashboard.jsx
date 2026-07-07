@@ -1,17 +1,58 @@
 import React from 'react';
-import { Banknote, Check, CreditCard, Settings, TrendingUp, Wallet } from 'lucide-react';
+import { Banknote, BarChart3, Check, CreditCard, Settings, Settings2, TrendingUp, Wallet } from 'lucide-react';
 import { Button, Card, EmptyState, Modal } from '../components/ui';
 import { getDashboardData } from '../services/dashboard.service';
+import { DynamicChart } from '../components/DynamicChart';
+import { ChartConfig } from '../components/ChartConfig';
+import { prepareChartData } from '../services/chartData.service';
 import { calcEstado, dateFmt, money, month } from '../utils/format';
 
 const DASHBOARD_CARDS_KEY = 'fintrack_dashboard_cards';
+const DASHBOARD_CHART_KEY = 'fintrack_dashboard_chart';
 const DASHBOARD_CARD_OPTIONS = [
-  { id: 'balance', label: 'Balance de cuentas', description: 'Saldo total y distribución por cuenta.', Icon: Wallet },
+  { id: 'balance', label: 'Balance de cuentas', description: 'Saldo total y distribucion por cuenta.', Icon: Wallet },
   { id: 'pendiente', label: 'Cuentas por cobrar', description: 'Importe pendiente de cobro.', Icon: CreditCard },
   { id: 'pagos', label: 'Cobros del mes', description: 'Cobros registrados durante el mes actual.', Icon: Banknote },
   { id: 'movimientos', label: 'Ingresos y egresos', description: 'Resumen general de movimientos.', Icon: TrendingUp },
 ];
 const DEFAULT_DASHBOARD_CARDS = DASHBOARD_CARD_OPTIONS.map((item) => item.id);
+const DATA_SOURCES_LABELS = {
+  accounts: 'Balance de cuentas',
+  debts: 'Cuentas por cobrar',
+  payments: 'Cobros del mes',
+  movements: 'Ingresos vs Egresos',
+  budgets: 'Presupuestos',
+  goals: 'Metas',
+};
+const DEFAULT_CHART_CONFIG = {
+  type: 'bar',
+  dataSources: ['accounts'],
+  height: 300,
+  showGrid: true,
+  showLegend: true,
+  showTooltip: true,
+  curved: false,
+};
+
+function createDefaultChartConfig() {
+  const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now();
+  return { ...DEFAULT_CHART_CONFIG, id };
+}
+
+function normalizeChartConfigs(configs) {
+  const list = Array.isArray(configs) && configs.length ? configs : [createDefaultChartConfig()];
+  return list.map((config) => ({
+    ...DEFAULT_CHART_CONFIG,
+    ...config,
+    id: config?.id || createDefaultChartConfig().id,
+    dataSources: Array.isArray(config?.dataSources) && config.dataSources.length ? config.dataSources : DEFAULT_CHART_CONFIG.dataSources,
+    height: Math.min(600, Math.max(200, Number(config?.height || DEFAULT_CHART_CONFIG.height))),
+    showGrid: config?.showGrid !== false,
+    showLegend: config?.showLegend !== false,
+    showTooltip: config?.showTooltip !== false,
+    curved: Boolean(config?.curved),
+  }));
+}
 
 function MetricCard({ icon, label, value, helper, danger = false, chart }) {
   return <div className="metric-card"><div className="metric-label">{icon}{label}</div><div className={`metric-value ${danger ? 'danger-text' : ''}`}>{value}</div>{chart}<div className="metric-change neutral">{helper}</div></div>;
@@ -20,7 +61,7 @@ function MetricCard({ icon, label, value, helper, danger = false, chart }) {
 function MiniBarChart({ items, danger = false, split = false }) {
   const cleanItems = items.filter((item) => Number(item.value || 0) > 0).slice(0, 8);
   const max = Math.max(...cleanItems.map((item) => Number(item.value || 0)), 1);
-  if (!cleanItems.length) return <div className="mini-chart-empty">Sin datos para gráfico</div>;
+  if (!cleanItems.length) return <div className="mini-chart-empty">Sin datos para grafico</div>;
   return (
     <div className="mini-chart">
       {cleanItems.map((item, index) => (
@@ -47,6 +88,8 @@ function ListCard({ title, items, empty }) {
 export function Dashboard({ supabase, user, isAdmin }) {
   const [data, setData] = React.useState({ deudas: [], pagos: [], cuentas: [], movimientos: [], presupuestos: [], metas: [] });
   const [configOpen, setConfigOpen] = React.useState(false);
+  const [chartConfigOpen, setChartConfigOpen] = React.useState(false);
+  const [chartConfigFooter, setChartConfigFooter] = React.useState(null);
   const [draftCards, setDraftCards] = React.useState(DEFAULT_DASHBOARD_CARDS);
   const [visibleCards, setVisibleCards] = React.useState(() => {
     try {
@@ -54,6 +97,14 @@ export function Dashboard({ supabase, user, isAdmin }) {
       return Array.isArray(saved) && saved.length ? saved : DEFAULT_DASHBOARD_CARDS;
     } catch {
       return DEFAULT_DASHBOARD_CARDS;
+    }
+  });
+  const [chartConfigs, setChartConfigs] = React.useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DASHBOARD_CHART_KEY) || 'null');
+      return normalizeChartConfigs(saved);
+    } catch {
+      return [createDefaultChartConfig()];
     }
   });
 
@@ -67,6 +118,10 @@ export function Dashboard({ supabase, user, isAdmin }) {
   React.useEffect(() => {
     localStorage.setItem(DASHBOARD_CARDS_KEY, JSON.stringify(visibleCards));
   }, [visibleCards]);
+
+  React.useEffect(() => {
+    localStorage.setItem(DASHBOARD_CHART_KEY, JSON.stringify(chartConfigs));
+  }, [chartConfigs]);
 
   const isVisible = (id) => visibleCards.includes(id);
   function openDashboardConfig() {
@@ -84,6 +139,16 @@ export function Dashboard({ supabase, user, isAdmin }) {
   function toggleDraftCard(id) {
     setDraftCards((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
+  const openChartConfig = React.useCallback(() => {
+    setChartConfigOpen(true);
+  }, []);
+  const closeChartConfig = React.useCallback(() => {
+    setChartConfigOpen(false);
+  }, []);
+  const saveChartConfig = React.useCallback((newConfigs) => {
+    setChartConfigs(normalizeChartConfigs(newConfigs));
+    setChartConfigOpen(false);
+  }, []);
 
   const pendiente = data.deudas.reduce((sum, deuda) => sum + Math.max(0, Number(deuda.monto_total || 0) - Number(deuda.monto_pagado || 0)), 0);
   const ingresos = data.movimientos.filter((movimiento) => movimiento.tipo === 'ingreso').reduce((sum, movimiento) => sum + Number(movimiento.monto || 0), 0);
@@ -126,10 +191,16 @@ export function Dashboard({ supabase, user, isAdmin }) {
     .filter((meta) => meta.pct >= 80)
     .slice(0, 3);
 
+  const chartsDataResults = chartConfigs.map((config) => ({
+    config,
+    ...prepareChartData(config.dataSources, data),
+  }));
+
   return (
     <>
       <div className="dashboard-toolbar">
         <Button onClick={openDashboardConfig}><Settings size={16} />Configurar dashboard</Button>
+        <Button onClick={openChartConfig}><BarChart3 size={16} />Configurar grafico</Button>
       </div>
       <div className="metrics-grid">
         {isVisible('balance') && <MetricCard icon={<Wallet />} label="Balance cuentas" value={money(balanceTotal)} helper={`${data.cuentas.length} cuentas activas`} chart={<MiniBarChart items={accountChart} />} />}
@@ -140,18 +211,57 @@ export function Dashboard({ supabase, user, isAdmin }) {
       {!visibleCards.length && <Card className="empty-dashboard"><div className="card-body muted">Activa al menos una tarjeta desde Configurar dashboard.</div></Card>}
       <div className="grid-2">
         <ListCard title="Cuentas por cobrar por vencer" empty="Sin cuentas por cobrar por vencer" items={porVencer.map((deuda) => `${deuda.clientes?.nombre || ''} - ${deuda.descripcion}: ${money(Number(deuda.monto_total || 0) - Number(deuda.monto_pagado || 0))}`)} />
-        <ListCard title="Últimos cobros recibidos" empty="Sin cobros registrados" items={data.pagos.slice(0, 5).map((pago) => `${dateFmt(pago.fecha)} - ${pago.clientes?.nombre || ''}: ${money(pago.monto)}`)} />
+        <ListCard title="Ultimos cobros recibidos" empty="Sin cobros registrados" items={data.pagos.slice(0, 5).map((pago) => `${dateFmt(pago.fecha)} - ${pago.clientes?.nombre || ''}: ${money(pago.monto)}`)} />
       </div>
       <div className="grid-2 dashboard-extra">
         <ListCard title="Alertas de presupuesto" empty="Sin presupuestos en alerta" items={presupuestoAlerts.map((presupuesto) => `${presupuesto.label}: ${money(presupuesto.usado)} de ${money(presupuesto.limite)} (${presupuesto.pct}%)`)} />
-        <ListCard title="Metas próximas" empty="Sin metas próximas" items={metasAlerts.map((meta) => `${meta.nombre}: ${meta.pct}% completado (${money(meta.monto_actual)} / ${money(meta.monto_objetivo)})`)} />
+        <ListCard title="Metas proximas" empty="Sin metas proximas" items={metasAlerts.map((meta) => `${meta.nombre}: ${meta.pct}% completado (${money(meta.monto_actual)} / ${money(meta.monto_objetivo)})`)} />
+      </div>
+      <div className="charts-grid">
+        {chartsDataResults.map((result, index) => {
+          const config = result.config;
+          const sources = result.sources;
+          const dataMap = result.dataMap;
+
+          const allData = sources.flatMap((source) => dataMap[source]?.data || []);
+          const firstConfig = sources.map((source) => dataMap[source]?.config).find(Boolean) || {};
+
+          if (allData.length === 0) return null;
+
+          return (
+            <Card key={index} className="chart-card">
+              <div className="chart-card-header">
+                <h3 className="chart-card-title">
+                  {sources.map((s) => DATA_SOURCES_LABELS[s] || s).join(' + ')}
+                </h3>
+                <div className="chart-card-actions">
+                  <button onClick={openChartConfig} title="Configurar graficos">
+                    <Settings2 size={18} />
+                  </button>
+                </div>
+              </div>
+              <DynamicChart
+                type={config.type}
+                data={allData}
+                config={{
+                  ...firstConfig,
+                  showGrid: config.showGrid,
+                  showLegend: config.showLegend,
+                  showTooltip: config.showTooltip,
+                  curved: config.curved,
+                }}
+                height={config.height}
+              />
+            </Card>
+          );
+        })}
       </div>
       <Modal open={configOpen} title="Configurar dashboard" onClose={closeDashboardConfig}>
         <div className="modal-body">
           <div className="dashboard-config-hero">
             <div>
               <strong>Personaliza tu resumen</strong>
-              <p>Activa solo las tarjetas que necesitas ver al iniciar sesión.</p>
+              <p>Activa solo las tarjetas que necesitas ver al iniciar sesion.</p>
             </div>
             <span>{draftCards.length}/{DASHBOARD_CARD_OPTIONS.length} activas</span>
           </div>
@@ -178,7 +288,11 @@ export function Dashboard({ supabase, user, isAdmin }) {
           <Button variant="primary" onClick={saveDashboardConfig}>Guardar</Button>
         </div>
       </Modal>
+      <Modal open={chartConfigOpen} title="Configurar graficos" onClose={closeChartConfig} className="chart-config-modal" footer={chartConfigFooter}>
+        <div className="modal-body">
+          <ChartConfig configs={chartConfigs} onChange={saveChartConfig} onClose={closeChartConfig} onActionsChange={setChartConfigFooter} />
+        </div>
+      </Modal>
     </>
   );
 }
-

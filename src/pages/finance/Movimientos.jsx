@@ -79,6 +79,7 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
       notify(error.message);
       return;
     }
+    notify('Movimiento eliminado correctamente.', 'success');
     load();
   }
   async function save(event) {
@@ -103,6 +104,7 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
     setForm({ tipo: 'ingreso', concepto: '', tipo_movimiento_id: '', cuenta_id: '', monto: '', fecha: today() });
     setEditingId(null);
     setOpen(false);
+    notify(editingId ? 'Movimiento actualizado correctamente.' : 'Movimiento registrado correctamente.', 'success');
     load();
   }
   async function saveTipo(event) {
@@ -119,6 +121,7 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
     }
     setTipoForm({ tipo: 'ingreso', nombre: '' });
     setTipoEditingId(null);
+    notify(tipoEditingId ? 'Tipo actualizado correctamente.' : 'Tipo creado correctamente.', 'success');
     load();
   }
   function editTipo(tipo) {
@@ -137,6 +140,7 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
       setTipoEditingId(null);
       setTipoForm({ tipo: 'ingreso', nombre: '' });
     }
+    notify('Tipo eliminado correctamente.', 'success');
     load();
   }
   const tiposFiltrados = tipos.filter((t) => t.tipo === form.tipo);

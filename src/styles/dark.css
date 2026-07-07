@@ -1,4 +1,4 @@
-﻿/* Tema oscuro final */
+/* Tema oscuro final */
 /* Tema oscuro final: debe quedar despues del refresh visual para no ser sobrescrito */
 :root[data-theme="dark"] {
   --primary-light: rgba(29, 158, 117, .18);
@@ -50,7 +50,6 @@
 :root[data-theme="dark"] .card,
 :root[data-theme="dark"] .metric-card,
 :root[data-theme="dark"] .account-card,
-:root[data-theme="dark"] .modal,
 :root[data-theme="dark"] .dialog-card,
 :root[data-theme="dark"] .toast,
 :root[data-theme="dark"] .busy-card,
@@ -64,21 +63,11 @@
 
 :root[data-theme="dark"] .topbar,
 :root[data-theme="dark"] .auth-card,
-:root[data-theme="dark"] .modal,
 :root[data-theme="dark"] .dialog-card {
   backdrop-filter: blur(16px);
 }
 
 :root[data-theme="dark"] .card-header,
-:root[data-theme="dark"] .modal-footer {
-  border-color: var(--border);
-  background: linear-gradient(180deg, rgba(20, 32, 51, .96), rgba(13, 24, 40, .96));
-}
-
-:root[data-theme="dark"] .modal-header {
-  border-color: var(--border);
-}
-
 :root[data-theme="dark"] input,
 :root[data-theme="dark"] select,
 :root[data-theme="dark"] textarea,
@@ -288,7 +277,6 @@
 :root[data-theme="dark"] .card,
 :root[data-theme="dark"] .metric-card,
 :root[data-theme="dark"] .account-card,
-:root[data-theme="dark"] .modal,
 :root[data-theme="dark"] .dialog-card,
 :root[data-theme="dark"] .toast,
 :root[data-theme="dark"] .busy-card,
@@ -318,16 +306,13 @@
   box-shadow: 0 26px 70px rgba(0, 0, 0, .48), 0 0 0 1px rgba(31, 201, 151, .10);
 }
 
-:root[data-theme="dark"] .card-header,
-:root[data-theme="dark"] .modal-header,
-:root[data-theme="dark"] .modal-footer {
+:root[data-theme="dark"] .card-header {
   border-color: var(--border);
   background:
     radial-gradient(circle at 90% 0%, rgba(31, 201, 151, .12), transparent 32%),
     linear-gradient(180deg, rgba(20, 34, 56, .98), rgba(12, 22, 38, .98));
 }
 
-:root[data-theme="dark"] .modal-overlay,
 :root[data-theme="dark"] .dialog-backdrop {
   background: rgba(2, 6, 14, .74);
   backdrop-filter: blur(8px);
@@ -589,7 +574,6 @@
 :root[data-theme="dark"][data-surface-style="solid"] .metric-card,
 :root[data-theme="dark"][data-surface-style="solid"] .account-card,
 :root[data-theme="dark"][data-surface-style="solid"] .topbar,
-:root[data-theme="dark"][data-surface-style="solid"] .modal,
 :root[data-theme="dark"][data-surface-style="solid"] .auth-card {
   background: #10192a;
   backdrop-filter: none;
@@ -599,7 +583,6 @@
 :root[data-theme="dark"][data-surface-style="glass"] .metric-card,
 :root[data-theme="dark"][data-surface-style="glass"] .account-card,
 :root[data-theme="dark"][data-surface-style="glass"] .topbar,
-:root[data-theme="dark"][data-surface-style="glass"] .modal,
 :root[data-theme="dark"][data-surface-style="glass"] .auth-card {
   background:
     radial-gradient(circle at 92% 0%, rgba(var(--primary-rgb), .10), transparent 31%),
@@ -611,7 +594,6 @@
 :root[data-theme="dark"][data-surface-style="bordered"] .metric-card,
 :root[data-theme="dark"][data-surface-style="bordered"] .account-card,
 :root[data-theme="dark"][data-surface-style="bordered"] .topbar,
-:root[data-theme="dark"][data-surface-style="bordered"] .modal,
 :root[data-theme="dark"][data-surface-style="bordered"] .auth-card {
   border-color: rgba(var(--primary-rgb), .34);
   border-width: 2px;
@@ -640,6 +622,59 @@
 :root[data-theme="dark"] .theme-preset-card:hover {
   border-color: rgba(var(--primary-rgb), .48);
   box-shadow: 0 14px 34px rgba(0, 0, 0, .28), 0 0 0 1px rgba(var(--primary-rgb), .08);
+}
+
+:root[data-theme="dark"] .appearance-preset,
+:root[data-theme="dark"] .appearance-choice,
+:root[data-theme="dark"] .appearance-color-control,
+:root[data-theme="dark"] .company-logo-preview {
+  border-color: var(--border);
+  background:
+    linear-gradient(180deg, rgba(17, 31, 52, .98), rgba(10, 19, 34, .98));
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .appearance-builder {
+  border-color: var(--border);
+  background: linear-gradient(180deg, rgba(13, 24, 39, .98), rgba(8, 16, 28, .96));
+}
+
+:root[data-theme="dark"] .appearance-preset.active,
+:root[data-theme="dark"] .appearance-choice.active {
+  border-color: rgba(var(--primary-rgb), .50);
+  background: linear-gradient(180deg, rgba(17, 31, 52, .98), rgba(var(--primary-rgb), .14));
+}
+
+:root[data-theme="dark"] .appearance-choice-icon,
+:root[data-theme="dark"] .appearance-choice-check {
+  background: rgba(var(--primary-rgb), .16);
+  color: var(--primary);
+}
+
+:root[data-theme="dark"] .appearance-option-group {
+  border-color: var(--border);
+  background: rgba(10, 19, 34, .72);
+}
+
+:root[data-theme="dark"] .appearance-color-preview {
+  border-color: rgba(17, 31, 52, .98);
+  box-shadow: 0 0 0 1px var(--border), 0 14px 26px rgba(0, 0, 0, .24);
+}
+
+:root[data-theme="dark"] .appearance-preview {
+  border-color: var(--border);
+  background: linear-gradient(135deg, rgba(17, 31, 52, .98), rgba(var(--primary-rgb), .10));
+}
+
+:root[data-theme="dark"] .company-logo-manager {
+  border-color: rgba(var(--primary-rgb), .26);
+  background:
+    radial-gradient(circle at 96% 0%, rgba(var(--primary-rgb), .16), transparent 36%),
+    linear-gradient(135deg, rgba(var(--primary-rgb), .08), rgba(var(--accent-rgb), .06));
+}
+
+:root[data-theme="dark"] .logo-url-advanced {
+  color: var(--text-muted);
 }
 
 :root[data-theme="dark"] .theme-preset-swatches i {

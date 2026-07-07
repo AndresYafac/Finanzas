@@ -9,6 +9,7 @@ import {
   Database,
   LayoutDashboard,
   Bell,
+  Palette,
   Search,
   ShieldCheck,
   Settings,
@@ -23,7 +24,7 @@ import { createStoredClient } from './config/supabase';
 import { applyVisualConfig, getCompanyConfig, getVisualConfig } from './config/visualConfig';
 import { LOCKED_KEY, REMEMBER_KEY } from './constants/authStorage';
 import { clearRememberedAccount } from './controllers/auth.controller';
-import { Auth, PinUnlock } from './components/auth/Auth';
+import { Auth, PasswordRecovery, PinUnlock } from './components/auth/Auth';
 import { AppLayout } from './components/layout/AppLayout';
 import { AppDialogs, AuthCard } from './components/ui';
 import { Config } from './pages/Config';
@@ -40,6 +41,7 @@ const lazyPage = (loader, exportName) => React.lazy(() => loader().then((module)
 
 const Dashboard = lazyPage(() => import('./pages/Dashboard'), 'Dashboard');
 const Perfil = lazyPage(() => import('./pages/Perfil'), 'Perfil');
+const Apariencia = lazyPage(() => import('./pages/Apariencia'), 'Apariencia');
 const Clientes = lazyPage(() => import('./pages/finance/Clientes'), 'Clientes');
 const Cuentas = lazyPage(() => import('./pages/finance/Cuentas'), 'Cuentas');
 const Deudas = lazyPage(() => import('./pages/finance/Deudas'), 'Deudas');
@@ -72,14 +74,22 @@ const PAGE_IDS = [
   'backup',
   'auditoria',
   'perfil',
+  'apariencia',
   'usuarios-admin',
   'config',
 ];
+
+function isRecoveryUrl() {
+  const search = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  return search.get('recovery') === '1' || search.get('type') === 'recovery' || hash.get('type') === 'recovery';
+}
 
 function App() {
   const [supabase, setSupabase] = React.useState(createStoredClient);
   const [session, setSession] = React.useState(null);
   const [profile, setProfile] = React.useState(null);
+  const [passwordRecovery, setPasswordRecovery] = React.useState(() => isRecoveryUrl());
   const [page, setPage] = React.useState(() => {
     const savedPage = storage.getRaw(LAST_PAGE_KEY);
     return PAGE_IDS.includes(savedPage) ? savedPage : 'dashboard';
@@ -98,6 +108,7 @@ function App() {
   const [isMobile, setIsMobile] = React.useState(() => isMobileViewport());
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [offline, setOffline] = React.useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
+  const [companyConfig, setCompanyConfig] = React.useState(getCompanyConfig);
 
   React.useEffect(() => {
     setFeedbackHandlers({
@@ -118,6 +129,13 @@ function App() {
     window.addEventListener('fintrack_visual_config', syncVisualConfig);
     return () => window.removeEventListener('fintrack_visual_config', syncVisualConfig);
   }, [session?.user?.id]);
+
+  React.useEffect(() => {
+    const syncCompanyConfig = () => setCompanyConfig(getCompanyConfig());
+    syncCompanyConfig();
+    window.addEventListener('fintrack_company_config', syncCompanyConfig);
+    return () => window.removeEventListener('fintrack_company_config', syncCompanyConfig);
+  }, []);
 
   React.useEffect(() => {
     const onBeforeInstallPrompt = (event) => {
@@ -168,9 +186,8 @@ function App() {
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
       if (event === 'PASSWORD_RECOVERY') {
-        setPage('perfil');
-        storage.setRaw(LAST_PAGE_KEY, 'perfil');
-        setMessage('Recuperación validada. Ingresa tu nueva contraseña en la sección Contraseña.');
+        setPasswordRecovery(true);
+        setMessage('');
       }
     });
     return () => data.subscription.unsubscribe();
@@ -185,7 +202,7 @@ function App() {
       const { data, error } = await getProfile(supabase, session.user.id);
       if (error) setMessage(error.message);
       if (data && (data.activo === false || data.deleted_at)) {
-        setMessage('Tu usuario está desactivado. Contacta al administrador.');
+        setMessage('Tu usuario esta desactivado. Contacta al administrador.');
         clearRememberedAccount();
         await supabase.auth.signOut();
         setSession(null);
@@ -211,13 +228,13 @@ function App() {
     const resetTimers = () => {
       window.clearTimeout(logoutTimer);
       window.clearTimeout(warningTimer);
-      warningTimer = window.setTimeout(() => notify('Tu sesión se cerrará en 1 minuto por inactividad.', 'warning'), INACTIVITY_TIMEOUT_MS - INACTIVITY_WARNING_MS);
+      warningTimer = window.setTimeout(() => notify('Tu sesion se cerrara en 1 minuto por inactividad.', 'warning'), INACTIVITY_TIMEOUT_MS - INACTIVITY_WARNING_MS);
       logoutTimer = window.setTimeout(async () => {
         await supabase.auth.signOut();
         storage.remove(LOCKED_KEY);
         setSession(null);
         setProfile(null);
-        notify('Sesión cerrada por inactividad.', 'success');
+        notify('Sesion cerrada por inactividad.', 'success');
       }, INACTIVITY_TIMEOUT_MS);
     };
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
@@ -260,6 +277,15 @@ function App() {
   }, [supabase, session?.user, profile]);
 
   if (!supabase) return <><Setup onReady={setSupabase} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
+  if (passwordRecovery && session) {
+    return <><PasswordRecovery supabase={supabase} onComplete={(nextMessage) => {
+      setPasswordRecovery(false);
+      setSession(null);
+      setProfile(null);
+      setMessage(nextMessage);
+      window.history.replaceState({}, document.title, window.location.origin);
+    }} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
+  }
   if (!session) return <><Auth supabase={supabase} message={message} setMessage={setMessage} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (locked && !profile) return <><AuthCard title="Desbloquear FinTrack"><p className="muted">Cargando cuenta recordada...</p></AuthCard><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (locked && profile?.pin_hash) {
@@ -297,22 +323,23 @@ function App() {
       ['pagos', 'Cobros recibidos', Banknote, can('pagos')],
     ]],
     ['por pagar', [
-      ['prestamos-recibidos', 'Préstamos por pagar', Banknote, can('prestamos-recibidos')],
+      ['prestamos-recibidos', 'Prestamos por pagar', Banknote, can('prestamos-recibidos')],
       ['pagos-prestamos-recibidos', 'Pagos a acreedores', TrendingDown, can('pagos-prestamos-recibidos')],
     ]],
-    ['planificación', [
+    ['planificacion', [
       ['presupuestos', 'Presupuestos', ClipboardList, can('presupuestos')],
       ['metas', 'Metas', Target, can('metas')],
     ]],
-    ['análisis', [
+    ['analisis', [
       ['reportes', 'Reportes', BarChart3, can('reportes')],
       ['backup', 'Backup', Database, can('backup')],
-      ['auditoria', 'Auditoría', ShieldCheck, can('auditoria')],
+      ['auditoria', 'Auditoria', ShieldCheck, can('auditoria')],
     ]],
     ['sistema', [
       ['perfil', 'Mi perfil', UserCircle, true],
+      ['apariencia', 'Apariencia', Palette, true],
       ['usuarios-admin', 'Usuarios', Users, isAdmin],
-      ['config', 'Configuración', Settings, isAdmin],
+      ['config', 'Configuracion', Settings, isAdmin],
     ]],
   ];
 
@@ -331,7 +358,7 @@ function App() {
 
   function openPage(nextPage) {
     if ((nextPage === 'config' || nextPage === 'usuarios-admin') && !isAdmin) return;
-    if (!can(nextPage, 'view')) return notify('No tienes permiso para ver este módulo.');
+    if (!can(nextPage, 'view')) return notify('No tienes permiso para ver este modulo.');
     setPage(nextPage);
     setSidebarOpen(false);
   }
@@ -364,7 +391,7 @@ function App() {
   const currentTitle = pageTitle(page, isAdmin);
   const dialogs = <AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} />;
   const pageContent = (
-    <React.Suspense fallback={<div className="page-loader">Cargando módulo...</div>}>
+    <React.Suspense fallback={<div className="page-loader">Cargando modulo...</div>}>
       <div className={`page active page-${page}`}>
         {page === 'dashboard' && <Dashboard supabase={supabase} user={session.user} isAdmin={isAdmin} />}
         {page === 'clientes' && <Clientes supabase={supabase} user={session.user} can={(action) => can('clientes', action)} />}
@@ -380,6 +407,7 @@ function App() {
         {page === 'backup' && <Backup supabase={supabase} user={session.user} can={(action) => can('backup', action)} />}
         {page === 'auditoria' && <Auditoria supabase={supabase} user={session.user} can={(action) => can('auditoria', action)} />}
         {page === 'perfil' && <Perfil supabase={supabase} user={session.user} profile={profile} onSaved={() => setRefreshKey((x) => x + 1)} />}
+        {page === 'apariencia' && <Apariencia user={session.user} />}
         {page === 'usuarios-admin' && isAdmin && <UsuariosAdmin supabase={supabase} user={session.user} />}
         {page === 'config' && isAdmin && <Config onReady={setSupabase} />}
       </div>
@@ -412,6 +440,7 @@ function App() {
       onInstall={installApp}
       dialogs={dialogs}
       LogoIcon={AppLogoIcon}
+      logoUrl={companyConfig.logo_url}
     >
       {pageContent}
     </AppLayout>
@@ -438,23 +467,23 @@ function pageTitle(page, isAdmin) {
     dashboard: ['Dashboard', 'Resumen general de finanzas'],
     clientes: ['Clientes', 'Personas registradas por el administrador'],
     cuentas: ['Cuentas y caja', 'Administra tus cuentas bancarias y billeteras'],
-    deudas: ['Cuentas por cobrar', 'Ventas, servicios y préstamos que deben pagarte'],
-    'prestamos-recibidos': ['Préstamos por pagar', 'Dinero que te prestaron y aún debes'],
-    'pagos-prestamos-recibidos': ['Pagos a acreedores', 'Pagos realizados por préstamos que debes'],
+    deudas: ['Cuentas por cobrar', 'Ventas, servicios y prestamos que deben pagarte'],
+    'prestamos-recibidos': ['Prestamos por pagar', 'Dinero que te prestaron y aun debes'],
+    'pagos-prestamos-recibidos': ['Pagos a acreedores', 'Pagos realizados por prestamos que debes'],
     pagos: ['Cobros recibidos', 'Dinero recibido de clientes o deudores'],
     movimientos: ['Movimientos de caja', 'Ingresos y egresos generales'],
-    presupuestos: ['Presupuestos', 'Control mensual por categoría'],
+    presupuestos: ['Presupuestos', 'Control mensual por categoria'],
     metas: ['Metas financieras', 'Objetivos de ahorro y crecimiento'],
-    reportes: ['Reportes', 'Análisis financiero'],
-    backup: ['Backup', 'Exportación de datos'],
-    auditoria: ['Auditoría', 'Historial de acciones importantes'],
-    perfil: ['Mi perfil', 'Información personal y seguridad'],
-    'usuarios-admin': ['Usuarios', 'Activación y control de accesos'],
-    config: ['Configuración', 'Conexión a base de datos'],
+    reportes: ['Reportes', 'Analisis financiero'],
+    backup: ['Backup', 'Exportacion de datos'],
+    auditoria: ['Auditoria', 'Historial de acciones importantes'],
+    perfil: ['Mi perfil', 'Informacion personal y seguridad'],
+    apariencia: ['Apariencia', 'Personalizacion visual del sistema'],
+    'usuarios-admin': ['Usuarios', 'Activacion y control de accesos'],
+    config: ['Configuracion', 'Conexion a base de datos'],
   };
   return labels[page] || ['FinTrack', ''];
-}
-function AppLogoIcon({ size = 22 }) {
+}function AppLogoIcon({ size = 22 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
       <path d="M14 23.5h36a6 6 0 0 1 6 6v16a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6v-16a6 6 0 0 1 6-6Z" stroke="currentColor" strokeWidth="5" />
@@ -520,7 +549,7 @@ function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
       const debtAlerts = alertData.deudas
         .filter((d) => calcEstado(d) === 'vencido' || calcEstado(d) === 'por_vencer')
         .slice(0, 5)
-        .map((d) => ({ page: 'deudas', level: calcEstado(d) === 'vencido' ? 'danger' : 'warning', title: calcEstado(d) === 'vencido' ? 'Cuenta por cobrar vencida' : 'Cuenta por cobrar por vencer', text: `${d.descripcion || 'Sin descripción'} · ${money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}` }));
+        .map((d) => ({ page: 'deudas', level: calcEstado(d) === 'vencido' ? 'danger' : 'warning', title: calcEstado(d) === 'vencido' ? 'Cuenta por cobrar vencida' : 'Cuenta por cobrar por vencer', text: `${d.descripcion || 'Sin descripcion'} - ${money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}` }));
       const budgetAlerts = alertData.presupuestos.map((p) => {
         const used = alertData.movimientos
           .filter((m) => m.tipo === p.tipo && ((p.tipo_movimiento_id && m.tipo_movimiento_id === p.tipo_movimiento_id) || (!p.tipo_movimiento_id && (m.categoria || '') === (p.categoria || ''))))
@@ -544,7 +573,7 @@ function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
       const receivedLoanAlerts = alertData.prestamosRecibidos
         .filter((p) => p.fecha_vencimiento && (calcEstado({ fecha_vencimiento: p.fecha_vencimiento, monto_total: p.saldo_inicial || p.monto_original, monto_pagado: p.monto_pagado }) !== 'al_dia'))
         .slice(0, 4)
-        .map((p) => ({ page: 'prestamos-recibidos', level: 'warning', title: 'Préstamo por pagar', text: `${p.acreedor || p.descripcion || 'Acreedor'}: ${money(Number(p.saldo_inicial || p.monto_original || 0) - Number(p.monto_pagado || 0))}` }));
+        .map((p) => ({ page: 'prestamos-recibidos', level: 'warning', title: 'Prestamo por pagar', text: `${p.acreedor || p.descripcion || 'Acreedor'}: ${money(Number(p.saldo_inicial || p.monto_original || 0) - Number(p.monto_pagado || 0))}` }));
       setAlerts([...debtAlerts, ...budgetAlerts, ...goalAlerts, ...lowBalanceAlerts, ...receivedLoanAlerts]);
     }
     load();

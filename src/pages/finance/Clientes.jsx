@@ -7,6 +7,7 @@ import {
   FileDown,
   Pencil,
   Plus,
+  Search,
   Settings,
   Target,
   TrendingDown,
@@ -15,6 +16,7 @@ import {
 import { Badge, Field, Modal, RowActions, SelectField, TableSection } from '../../components/ui';
 import { confirmAction, notify } from '../../services/feedback';
 import { createCliente, deleteCliente, listClientes, updateCliente } from '../../services/clientes.service';
+import { lookupDocument } from '../../services/documentLookup.service';
 import { calcEstado, dateFmt, money, month, today } from '../../utils/format';
 import {
   MODULE_PERMISSIONS,
@@ -36,6 +38,7 @@ export function Clientes({ supabase, user, can = () => true }) {
   const emptyForm = { nombre: '', apellido: '', tipo_doc: 'DNI', documento: '', telefono: '', email: '', direccion: '', notas: '' };
   const [editingId, setEditingId] = React.useState(null);
   const [form, setForm] = React.useState(emptyForm);
+  const [lookupLoading, setLookupLoading] = React.useState(false);
   const load = React.useCallback(() => listClientes(supabase, user.id).then(({ data }) => setClientes(data || [])), [supabase, user.id]);
   React.useEffect(() => { load(); }, [load]);
   function openCreate() {
@@ -65,6 +68,7 @@ export function Clientes({ supabase, user, can = () => true }) {
       notify(error.message);
       return;
     }
+    notify('Cliente eliminado correctamente.', 'success');
     load();
   }
   async function save(event) {
@@ -82,7 +86,23 @@ export function Clientes({ supabase, user, can = () => true }) {
     setForm(emptyForm);
     setEditingId(null);
     setOpen(false);
+    notify(editingId ? 'Cliente actualizado correctamente.' : 'Cliente creado correctamente.', 'success');
     load();
+  }
+  async function searchDocument() {
+    if (!form.documento) return notify('Ingresa un documento para buscar.');
+    if (!['DNI', 'RUC'].includes(form.tipo_doc)) return notify('La búsqueda automática está disponible para DNI o RUC.');
+    setLookupLoading(true);
+    const { data, error } = await lookupDocument({ tipo: form.tipo_doc, documento: form.documento });
+    setLookupLoading(false);
+    if (error) return notify(error);
+    setForm((current) => ({
+      ...current,
+      nombre: data.nombre || current.nombre,
+      apellido: data.apellido || current.apellido,
+      direccion: data.direccion || current.direccion,
+    }));
+    notify('Documento consultado correctamente.', 'success');
   }
   const filtered = clientes.filter((c) => `${c.nombre} ${c.apellido} ${c.email} ${c.documento}`.toLowerCase().includes(query.toLowerCase()));
   return (
@@ -104,7 +124,12 @@ export function Clientes({ supabase, user, can = () => true }) {
             </div>
             <div className="form-row">
               <SelectField label="Tipo documento" value={form.tipo_doc} onChange={(v) => setForm({ ...form, tipo_doc: v })}><option>DNI</option><option>RUC</option><option>CE</option><option>Pasaporte</option></SelectField>
-              <Field label="Documento" value={form.documento} onChange={(v) => setForm({ ...form, documento: v })} />
+              <Field
+                label="Documento"
+                value={form.documento}
+                onChange={(v) => setForm({ ...form, documento: v })}
+                rightElement={<button className="input-action document-search-btn" type="button" onClick={searchDocument} disabled={lookupLoading} title="Buscar documento">{lookupLoading ? '...' : <Search size={17} />}</button>}
+              />
             </div>
             <Field label="Teléfono" value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} />
             <Field label="Email" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />

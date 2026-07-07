@@ -76,6 +76,7 @@ export function Pagos({ supabase, user, isAdmin, can = () => true }) {
       notify(error.message);
       return;
     }
+    notify('Cobro eliminado correctamente.', 'success');
     refreshRelated();
   }
   function refreshRelated() {
@@ -108,6 +109,7 @@ export function Pagos({ supabase, user, isAdmin, can = () => true }) {
     setForm({ cliente_id: '', deuda_id: '', cuenta_id: '', monto: '', metodo: 'Efectivo', referencia: '', fecha: today(), notas: '' });
     setEditingId(null);
     setOpen(false);
+    notify(editingId ? 'Cobro actualizado correctamente.' : 'Cobro registrado correctamente.', 'success');
     refreshRelated();
   }
   return (

@@ -79,6 +79,7 @@ export function Cuentas({ supabase, user, can = () => true }) {
       notify(error.message);
       return;
     }
+    notify('Cuenta eliminada correctamente.', 'success');
     load();
   }
   async function save(event) {
@@ -96,6 +97,7 @@ export function Cuentas({ supabase, user, can = () => true }) {
     setForm(emptyForm);
     setEditingId(null);
     setOpen(false);
+    notify(editingId ? 'Cuenta actualizada correctamente.' : 'Cuenta creada correctamente.', 'success');
     load();
   }
   async function saveTransfer(event) {
@@ -121,6 +123,7 @@ export function Cuentas({ supabase, user, can = () => true }) {
     }
     setTransferForm(emptyTransfer);
     setTransferOpen(false);
+    notify('Transferencia registrada correctamente.', 'success');
     load();
   }
   const cuentaNombre = (id) => {
@@ -130,7 +133,28 @@ export function Cuentas({ supabase, user, can = () => true }) {
   return (
     <>
       <div className="action-bar"><div></div><div className="table-actions">{can('create') && <button className="btn" onClick={() => setTransferOpen(true)}><ArrowRightLeft size={16} />Nueva transferencia</button>}{can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nueva cuenta</button>}</div></div>
-      <div className="grid-3">{cuentas.map((c) => <div className="account-card account-card-hover" key={c.id}><div className="account-card-actions"><RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(c)} onDelete={() => remove(c)} /></div><Building2 /><strong>{c.banco}</strong><span>{c.tipo} - {c.moneda}</span><b>{money(c.saldo)}</b></div>)}</div>
+      <div className="grid-3 accounts-grid">
+        {cuentas.map((c) => (
+          <div className="account-card account-card-hover bank-card" key={c.id}>
+            <div className="account-card-actions"><RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(c)} onDelete={() => remove(c)} /></div>
+            <div className="bank-card-head">
+              <div className="bank-card-icon"><Building2 size={22} /></div>
+              <div>
+                <strong>{c.banco}</strong>
+                <span>{c.tipo} · {c.moneda}</span>
+              </div>
+            </div>
+            <div className="bank-card-balance">
+              <small>Saldo disponible</small>
+              <b>{money(c.saldo)}</b>
+            </div>
+            <div className="bank-card-meta">
+              <span>Cuenta: {c.numero ? `•••• ${String(c.numero).slice(-4)}` : 'No registrada'}</span>
+              <span>CCI: {c.cci ? `•••• ${String(c.cci).slice(-4)}` : 'No registrado'}</span>
+            </div>
+          </div>
+        ))}
+      </div>
       <div className="card transfer-card"><div className="card-header"><h3>Ultimas transferencias</h3></div><div className="card-body">{transferencias.length ? transferencias.map((t) => <div className="list-row transfer-row" key={t.id}><span>{dateFmt(t.fecha)} - {cuentaNombre(t.cuenta_origen_id)} a {t.tipo_destino === 'propia' ? cuentaNombre(t.cuenta_destino_id) : `${t.banco_destino || 'Cuenta externa'} ${t.numero_destino || ''}`}</span><strong>{money(t.monto)}</strong></div>) : <div className="empty-state"><p>Sin transferencias registradas</p></div>}</div></div>
       <div className="report-spacer" />
       <TableSection title="Historial por cuenta" columns={['Fecha', 'Cuenta', 'Tipo', 'Detalle', 'Monto']} rows={historial.map((h) => [dateFmt(h.fecha), cuentaNombre(h.cuenta_id), badge(h.tipo), h.detalle || '-', money(h.monto)])} />

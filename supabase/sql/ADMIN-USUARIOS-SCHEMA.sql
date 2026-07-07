@@ -1,5 +1,5 @@
 -- Administracion segura de usuarios desde FinTrack.
--- No borra usuarios de auth.users; desactiva/elimina logicamente profiles.
+-- El boton eliminar borra realmente el usuario de auth.users.
 
 alter table public.profiles
   add column if not exists activo boolean not null default true,
@@ -136,7 +136,7 @@ create or replace function public.admin_eliminar_usuario(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, auth
 as $$
 begin
   if not public.es_admin_actual() then
@@ -147,10 +147,11 @@ begin
     raise exception 'No puedes eliminar tu propio usuario';
   end if;
 
-  update public.profiles
-  set activo = false,
-      deleted_at = now(),
-      updated_at = now()
+  if not exists (select 1 from auth.users where id = p_user_id) then
+    raise exception 'Usuario no encontrado';
+  end if;
+
+  delete from auth.users
   where id = p_user_id;
 end;
 $$;

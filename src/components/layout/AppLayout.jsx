@@ -10,12 +10,14 @@ function fullName(profile) {
   return [profile?.nombre, profile?.apellido].filter(Boolean).join(' ');
 }
 
-export function Sidebar({ pages, page, profile, user, isAdmin, sidebarOpen, onOpenPage, onLogout, LogoIcon }) {
+export function Sidebar({ pages, page, profile, user, isAdmin, sidebarOpen, onOpenPage, onLogout, LogoIcon, logoUrl }) {
   return (
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div className="sidebar-logo">
         <div className="brand">
-          <div className="brand-icon"><LogoIcon /></div>
+          <div className="brand-icon">
+            {logoUrl ? <img src={logoUrl} alt="Logo de FinTrack" /> : <LogoIcon />}
+          </div>
           <div>
             <div className="brand-name">FinTrack Pro</div>
             <div className="brand-sub">Panel de control</div>
@@ -132,12 +134,13 @@ export function AppLayout({
   onInstall,
   dialogs,
   LogoIcon,
+  logoUrl,
 }) {
   return (
     <div className={`layout ${sidebarHidden ? 'sidebar-hidden' : ''} ${isMobile ? 'layout-mobile' : ''} ${sidebarOpen ? 'sidebar-open' : ''}`}>
       <div className={`offline-indicator ${offline ? 'visible' : ''}`}>Sin conexión. Algunas funciones pueden no estar disponibles.</div>
       {isMobile && <button className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`} type="button" aria-label="Cerrar menú" onClick={onCloseMobileSidebar} />}
-      <Sidebar pages={pages} page={page} profile={profile} user={user} isAdmin={isAdmin} sidebarOpen={sidebarOpen} onOpenPage={onOpenPage} onLogout={onLogout} LogoIcon={LogoIcon} />
+      <Sidebar pages={pages} page={page} profile={profile} user={user} isAdmin={isAdmin} sidebarOpen={sidebarOpen} onOpenPage={onOpenPage} onLogout={onLogout} LogoIcon={LogoIcon} logoUrl={logoUrl} />
       <main className="main">
         <Topbar
           isMobile={isMobile}

@@ -6,9 +6,9 @@ export function MetricCard({ icon, label, value, helper, danger = false }) {
   return (
     <div className={`metric-card ${danger ? 'danger' : ''}`}>
       <div className="metric-icon">{icon}</div>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{helper}</small>
+      <span className="metric-label">{label}</span>
+      <strong className="metric-value">{value}</strong>
+      <small className="metric-helper">{helper}</small>
     </div>
   );
 }

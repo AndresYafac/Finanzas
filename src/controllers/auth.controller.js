@@ -94,7 +94,7 @@ export async function signUpUser({ supabase, email, password, nombre, apellido }
 
 export async function sendPasswordReset({ supabase, email }) {
   const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-    redirectTo: window.location.origin,
+    redirectTo: `${window.location.origin}?recovery=1`,
   });
   return { error };
 }

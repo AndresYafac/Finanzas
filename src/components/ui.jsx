@@ -1,5 +1,6 @@
-﻿import React from 'react';
+import React from 'react';
 import { Download, Pencil, Search, Trash2 } from 'lucide-react';
+import { getCompanyConfig } from '../config/visualConfig';
 
 function AppLogoIcon({ size = 30 }) {
   return (
@@ -14,11 +15,21 @@ function AppLogoIcon({ size = 30 }) {
 }
 
 export function AuthCard({ title, children }) {
+  const [companyConfig, setCompanyConfig] = React.useState(getCompanyConfig);
+
+  React.useEffect(() => {
+    const syncCompanyConfig = () => setCompanyConfig(getCompanyConfig());
+    window.addEventListener('fintrack_company_config', syncCompanyConfig);
+    return () => window.removeEventListener('fintrack_company_config', syncCompanyConfig);
+  }, []);
+
   return (
     <div id="auth-screen">
       <div className="auth-card">
         <div className="auth-logo">
-          <div className="logo-icon"><AppLogoIcon /></div>
+          <div className="logo-icon">
+            {companyConfig.logo_url ? <img src={companyConfig.logo_url} alt="Logo de FinTrack" /> : <AppLogoIcon />}
+          </div>
           <h1>{title}</h1>
           <p>Sistema de gestión financiera</p>
         </div>
@@ -131,7 +142,7 @@ export function SelectField({ label, value, onChange, children }) {
   );
 }
 
-export function Modal({ open, title, onClose, children, className = '' }) {
+export function Modal({ open, title, onClose, children, className = '', footer = null }) {
   if (!open) return null;
   return (
     <div className="modal-overlay open" onMouseDown={onClose}>
@@ -141,6 +152,7 @@ export function Modal({ open, title, onClose, children, className = '' }) {
           <button className="close-btn" onClick={onClose} type="button">X</button>
         </div>
         {children}
+        {footer}
       </div>
     </div>
   );
@@ -190,4 +202,3 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
     </>
   );
 }
-

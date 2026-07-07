@@ -82,6 +82,7 @@ export function PrestamosRecibidos({ supabase, user, can = () => true }) {
     if (!(await confirmAction(`Eliminar préstamo por pagar de ${row.acreedor || ''}?`))) return;
     const { error } = await eliminarPrestamoRecibido(supabase, row.id);
     if (error) return notify(error.message);
+    notify('Préstamo por pagar eliminado correctamente.', 'success');
     load();
   }
   async function save(event) {
@@ -110,6 +111,7 @@ export function PrestamosRecibidos({ supabase, user, can = () => true }) {
     setForm(emptyForm);
     setEditingId(null);
     setOpen(false);
+    notify(editingId ? 'Préstamo por pagar actualizado correctamente.' : 'Préstamo por pagar creado correctamente.', 'success');
     load();
   }
   return (

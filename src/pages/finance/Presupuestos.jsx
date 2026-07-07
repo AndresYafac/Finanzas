@@ -67,6 +67,7 @@ export function Presupuestos({ supabase, user, can = () => true }) {
     const { error } = await deletePresupuesto(supabase, user.id, row.id);
     if (error) return notify(error.message);
     await logAudit(supabase, user.id, 'presupuestos', 'delete', 'Presupuesto eliminado', row.id, row);
+    notify('Presupuesto eliminado correctamente.', 'success');
     load();
   }
   async function save(event) {
@@ -90,6 +91,7 @@ export function Presupuestos({ supabase, user, can = () => true }) {
     setOpen(false);
     setEditingId(null);
     setForm(emptyForm);
+    notify(editingId ? 'Presupuesto actualizado correctamente.' : 'Presupuesto creado correctamente.', 'success');
     load();
   }
   const tipoOptions = tipos.filter((t) => t.tipo === form.tipo);

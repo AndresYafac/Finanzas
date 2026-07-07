@@ -1,0 +1,655 @@
+/* Estilos para el sistema de gráficos dinámicos */
+
+/* Contenedor de gráfico vacío */
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+  border: 1px dashed var(--border);
+}
+
+.dynamic-chart {
+  width: 100%;
+  margin-top: 12px;
+}
+
+/* Panel de configuración de gráficos */
+.chart-config-panel {
+  display: grid;
+  gap: 24px;
+}
+
+.chart-config-section {
+  display: grid;
+  gap: 12px;
+}
+
+.chart-config-section h4 {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  margin: 0;
+}
+
+/* Grid de tipos de gráfico */
+.chart-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.chart-type-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: all .18s ease;
+  box-shadow: 0 2px 8px rgba(15, 32, 51, .04);
+}
+
+.chart-type-card:hover {
+  border-color: rgba(var(--primary-rgb), .4);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(var(--primary-rgb), .10);
+}
+
+.chart-type-card.active {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), .08), rgba(var(--accent-rgb), .06));
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .10);
+}
+
+.chart-type-card svg {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
+.chart-type-card div {
+  display: grid;
+  gap: 3px;
+}
+
+.chart-type-card b {
+  font-size: 13px;
+  font-weight: 800;
+  display: block;
+  color: var(--text);
+}
+
+.chart-type-card small {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  line-height: 1.3;
+}
+
+/* Lista de fuentes de datos */
+.data-source-list {
+  display: grid;
+  gap: 8px;
+}
+
+.data-source-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all .18s ease;
+  box-shadow: 0 2px 6px rgba(15, 32, 51, .03);
+}
+
+.data-source-option:hover {
+  border-color: rgba(var(--primary-rgb), .4);
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), .08);
+}
+
+.data-source-option:has(input:checked) {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), .06), rgba(var(--accent-rgb), .04));
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .08);
+}
+
+.data-source-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.data-source-option div {
+  display: grid;
+  gap: 3px;
+}
+
+.data-source-option b {
+  font-size: 13px;
+  font-weight: 700;
+  display: block;
+  color: var(--text);
+}
+
+.data-source-option small {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  line-height: 1.3;
+}
+
+/* Grid de opciones de visualización */
+.chart-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.chart-options-grid .form-group {
+  display: grid;
+  gap: 6px;
+}
+
+.chart-options-grid label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.chart-options-grid input[type="number"] {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  transition: all .15s ease;
+}
+
+.chart-options-grid input[type="number"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .10);
+}
+
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  transition: color .15s ease;
+}
+
+.checkbox-option:hover {
+  color: var(--primary);
+}
+
+.checkbox-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+/* Acciones del panel de configuración */
+.chart-config-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+/* Item de configuración de gráfico */
+.chart-config-item {
+  display: grid;
+  gap: 20px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgba(15, 32, 51, .04);
+}
+
+.chart-config-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-config-item-header h4 {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+
+.chart-config-remove {
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all .15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-config-remove:hover {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+/* Botón agregar gráfico */
+.chart-config-add {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+}
+
+.chart-config-add button {
+  width: 100%;
+  padding: 12px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .18s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.chart-config-add button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(var(--primary-rgb), .04);
+}
+
+/* Tarjeta de gráfico en el dashboard */
+.chart-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  transition: transform .18s ease, box-shadow .18s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.chart-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+
+.chart-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(var(--primary-rgb), .12);
+}
+
+.chart-card:hover::before {
+  opacity: 1;
+}
+
+.chart-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-card-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+  letter-spacing: -.2px;
+}
+
+.chart-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.chart-card-actions button {
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all .15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-card-actions button:hover {
+  background: rgba(var(--primary-rgb), .08);
+  color: var(--primary);
+}
+
+/* Sección de gráficos múltiples */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.chart-item {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  transition: transform .18s ease, box-shadow .18s ease;
+  position: relative;
+}
+
+.chart-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(var(--primary-rgb), .12);
+}
+
+.chart-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.chart-item-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+
+.chart-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.chart-item-actions button {
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-item-actions button:hover {
+  background: var(--bg);
+  color: var(--danger);
+}
+
+/* Responsive */
+@media (max-width: 1000px) {
+  .chart-type-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-options-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .chart-card-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .chart-config-actions {
+    flex-wrap: wrap;
+  }
+
+  .chart-config-actions button {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .chart-item-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+/* Modal de configuracion de graficos */
+.chart-config-modal {
+  width: min(1260px, calc(100vw - 48px));
+  max-height: min(90vh, 920px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-config-modal .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 24px;
+}
+
+.chart-config-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(var(--primary-rgb), .22);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(255, 255, 255, .96), rgba(248, 251, 253, .92));
+}
+
+.chart-config-hero strong {
+  display: block;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.chart-config-hero p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.chart-config-hero span {
+  flex: 0 0 auto;
+  padding: 9px 13px;
+  border-radius: 999px;
+  color: var(--primary);
+  background: rgba(var(--primary-rgb), .12);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.chart-config-modal .chart-config-panel {
+  gap: 18px;
+}
+
+.chart-config-modal .chart-config-item {
+  padding: 22px;
+  background: var(--surface);
+}
+
+.chart-config-item-header p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chart-config-modal .chart-type-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.chart-config-modal .data-source-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.chart-config-modal .chart-options-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.chart-config-modal .checkbox-option {
+  min-height: 44px;
+  padding: 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.chart-config-modal .checkbox-option:has(input:checked) {
+  border-color: var(--primary);
+  background: rgba(var(--primary-rgb), .08);
+}
+
+.chart-config-modal .chart-config-add {
+  margin-top: 0;
+}
+
+.chart-config-modal .chart-config-actions {
+  position: static;
+  flex: 0 0 auto;
+  z-index: 3;
+  margin: 0;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+:root[data-theme="dark"] .chart-empty,
+:root[data-theme="dark"] .chart-type-card,
+:root[data-theme="dark"] .data-source-option,
+:root[data-theme="dark"] .chart-config-modal .checkbox-option,
+:root[data-theme="dark"] .chart-config-item,
+:root[data-theme="dark"] .chart-card,
+:root[data-theme="dark"] .chart-item {
+  background: rgba(15, 27, 44, .94);
+  border-color: rgba(148, 163, 184, .22);
+}
+
+:root[data-theme="dark"] .chart-config-hero {
+  background:
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), .24), transparent 38%),
+    linear-gradient(135deg, rgba(var(--primary-rgb), .16), rgba(15, 27, 44, .88));
+  border-color: rgba(var(--primary-rgb), .34);
+}
+
+:root[data-theme="dark"] .chart-config-modal .chart-config-actions {
+  background: rgba(11, 20, 34, .92);
+}
+
+@media (max-width: 1100px) {
+  .chart-config-modal .chart-type-grid,
+  .chart-config-modal .data-source-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chart-config-modal .chart-options-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .chart-config-modal {
+    width: min(100vw - 20px, 520px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .chart-config-modal .modal-body {
+    max-height: calc(100vh - 110px);
+    padding: 16px;
+  }
+
+  .chart-config-hero,
+  .chart-config-item-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .chart-config-hero span {
+    width: 100%;
+    text-align: center;
+  }
+
+  .chart-config-modal .chart-config-item {
+    padding: 16px;
+  }
+
+  .chart-config-modal .chart-type-grid,
+  .chart-config-modal .data-source-list,
+  .chart-config-modal .chart-options-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-config-modal .chart-config-actions {
+    margin: 0;
+    padding: 12px 16px;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .chart-config-modal .chart-config-actions .btn {
+    width: 100%;
+  }
+}

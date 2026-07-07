@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check } from 'lucide-react';
+import { Check, Image as ImageIcon, UploadCloud, X } from 'lucide-react';
 import { createStoredClient, createSupabaseClient } from '../config/supabase';
 import { COMPANY_CONFIG_KEY, DEFAULT_COMPANY_CONFIG, getCompanyConfig } from '../config/visualConfig';
 import { Button, Card, Field, FormActions } from '../components/ui';
@@ -12,6 +12,7 @@ export function Config({ onReady, compact = false }) {
   const logoInputRef = React.useRef(null);
   const [status, setStatus] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [logoLoading, setLogoLoading] = React.useState(false);
 
   function companyStoragePayload(source) {
     return {
@@ -71,7 +72,7 @@ export function Config({ onReady, compact = false }) {
     }
     localStorage.setItem('sb_url', cleanUrl);
     localStorage.setItem('sb_key', key.trim());
-    setStatus('Conexión guardada correctamente.');
+    setStatus('Conexion guardada correctamente.');
     onReady(client);
     setLoading(false);
   }
@@ -79,6 +80,7 @@ export function Config({ onReady, compact = false }) {
   async function saveCompany(event) {
     event.preventDefault();
     localStorage.setItem(COMPANY_CONFIG_KEY, JSON.stringify(companyStoragePayload(company)));
+    window.dispatchEvent(new Event('fintrack_company_config'));
     const client = createStoredClient();
     if (client) {
       const { data: sessionData } = await client.auth.getSession();
@@ -93,33 +95,59 @@ export function Config({ onReady, compact = false }) {
   async function uploadLogo(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    setLogoLoading(true);
     const client = createStoredClient();
     if (!client) {
       setStatus('Configura Supabase antes de subir el logo.');
+      setLogoLoading(false);
       return;
     }
+    if (!file.type.startsWith('image/')) {
+      setStatus('Selecciona una imagen valida.');
+      setLogoLoading(false);
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setStatus('El logo no debe superar 2 MB.');
+      setLogoLoading(false);
+      return;
+    }
+
     const { data: sessionData } = await client.auth.getSession();
     const adminId = sessionData.session?.user?.id;
-    if (!adminId) return setStatus('Inicia sesión para subir el logo.');
+    if (!adminId) {
+      setStatus('Inicia sesion para subir el logo.');
+      setLogoLoading(false);
+      return;
+    }
+
     const ext = file.name.split('.').pop() || 'png';
     const path = `${adminId}/logo-${Date.now()}.${ext}`;
     const { error } = await uploadEmpresaLogo(client, path, file);
     if (error) {
       setStatus(error.message);
+      setLogoLoading(false);
       return;
     }
+
     const { data } = getEmpresaLogoUrl(client, path);
-    setCompany((current) => ({ ...current, logo_url: data.publicUrl }));
+    const nextCompany = { ...company, logo_url: data.publicUrl };
+    setCompany(nextCompany);
+    localStorage.setItem(COMPANY_CONFIG_KEY, JSON.stringify(companyStoragePayload(nextCompany)));
+    window.dispatchEvent(new Event('fintrack_company_config'));
     setStatus('Logo subido. Guarda los datos de empresa para conservarlo.');
+    setLogoLoading(false);
+    event.target.value = '';
   }
 
   const content = (
     <div className={compact ? '' : 'card-body'}>
-      <div className="alert alert-warning">Usa únicamente la clave Publishable o anon. Nunca uses service_role.</div>
+      <div className="alert alert-warning">Usa unicamente la clave Publishable o anon. Nunca uses service_role.</div>
       <form onSubmit={save}>
         <Field label="Supabase URL" value={url} onChange={setUrl} placeholder="https://xxxx.supabase.co" />
         <Field label="Publishable / Anon Key" type="password" value={key} onChange={setKey} />
-        <FormActions><Button variant="primary" type="submit" disabled={loading}>{loading ? 'Guardando...' : 'Guardar conexión'}</Button></FormActions>
+        <FormActions><Button variant="primary" type="submit" disabled={loading}>{loading ? 'Guardando...' : 'Guardar conexion'}</Button></FormActions>
         {status && <div className="connection-status success">{status}</div>}
       </form>
       {!compact && (
@@ -127,13 +155,39 @@ export function Config({ onReady, compact = false }) {
           <h4>Datos de empresa para reportes</h4>
           <Field label="Nombre comercial" value={company.nombre} onChange={(value) => updateCompany({ nombre: value })} />
           <Field label="RUC / Documento" value={company.documento} onChange={(value) => updateCompany({ documento: value })} />
-          <Field label="Dirección" value={company.direccion} onChange={(value) => updateCompany({ direccion: value })} />
-          <Field label="Teléfono" value={company.telefono} onChange={(value) => updateCompany({ telefono: value })} />
-          <Field label="URL del logo" value={company.logo_url} onChange={(value) => updateCompany({ logo_url: value })} placeholder="https://..." />
+          <Field label="Direccion" value={company.direccion} onChange={(value) => updateCompany({ direccion: value })} />
+          <Field label="Telefono" value={company.telefono} onChange={(value) => updateCompany({ telefono: value })} />
 
           <input ref={logoInputRef} type="file" accept="image/*" hidden onChange={uploadLogo} />
+          <div className="company-logo-manager">
+            <div className="company-logo-preview">
+              {company.logo_url ? (
+                <img src={company.logo_url} alt="Logo de empresa" />
+              ) : (
+                <ImageIcon size={30} />
+              )}
+            </div>
+            <div className="company-logo-copy">
+              <strong>Logo de empresa</strong>
+              <span>Sube una imagen PNG, JPG o WebP. Se usara en reportes y documentos exportados.</span>
+              <div className="company-logo-actions">
+                <Button onClick={() => logoInputRef.current?.click()} disabled={logoLoading}>
+                  <UploadCloud size={16} />{logoLoading ? 'Subiendo...' : 'Subir imagen'}
+                </Button>
+                {company.logo_url && (
+                  <Button onClick={() => updateCompany({ logo_url: '' })}>
+                    <X size={16} />Quitar
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+          <details className="logo-url-advanced">
+            <summary>Usar logo por URL</summary>
+            <Field label="URL del logo" value={company.logo_url} onChange={(value) => updateCompany({ logo_url: value })} placeholder="https://..." />
+          </details>
+
           <FormActions>
-            <Button onClick={() => logoInputRef.current?.click()}>Subir logo</Button>
             <Button variant="primary" type="submit"><Check size={16} />Guardar datos de empresa</Button>
           </FormActions>
         </form>
@@ -142,7 +196,5 @@ export function Config({ onReady, compact = false }) {
   );
 
   if (compact) return content;
-  return <div className="profile-section"><Card title="Configuración del sistema">{content}</Card></div>;
+  return <div className="profile-section"><Card title="Configuracion del sistema">{content}</Card></div>;
 }
-
-

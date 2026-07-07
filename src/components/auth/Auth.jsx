@@ -141,6 +141,88 @@ export function Auth({ supabase, message, setMessage }) {
   );
 }
 
+export function PasswordRecovery({ supabase, onComplete }) {
+  const [form, setForm] = React.useState({ password: '', confirm: '' });
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [message, setMessage] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const strength = getPasswordStrength(form.password, '');
+
+  async function submit(event) {
+    event.preventDefault();
+    setMessage('');
+    const passwordError = validatePassword(form.password, '');
+    if (passwordError) {
+      setMessage(passwordError);
+      return;
+    }
+    if (form.password !== form.confirm) {
+      setMessage('Las contrasenas no coinciden.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: form.password });
+      if (error) {
+        setMessage(friendlyAuthError(error));
+        return;
+      }
+      await supabase.auth.signOut();
+      onComplete?.('Contrasena actualizada correctamente. Inicia sesion con tu nueva contrasena.');
+    } catch (error) {
+      setMessage(error.message || 'No se pudo cambiar la contrasena.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AuthCard title="Recuperar contrasena">
+      <div className="auth-reset-title">
+        <strong>Crea tu nueva contrasena</strong>
+        <span>Este formulario solo aparece desde el enlace de recuperacion enviado a tu correo.</span>
+      </div>
+      <form onSubmit={submit}>
+        <Field
+          label="Nueva contrasena"
+          type={showPassword ? 'text' : 'password'}
+          value={form.password}
+          onChange={(value) => setForm((current) => ({ ...current, password: value }))}
+          required
+          minLength={8}
+          maxLength={128}
+          autoComplete="new-password"
+          rightElement={<button className="input-action" type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Ocultar contrasena' : 'Ver contrasena'}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>}
+        />
+        <Field
+          label="Confirmar contrasena"
+          type={showPassword ? 'text' : 'password'}
+          value={form.confirm}
+          onChange={(value) => setForm((current) => ({ ...current, confirm: value }))}
+          required
+          minLength={8}
+          maxLength={128}
+          autoComplete="new-password"
+        />
+        <div className={`password-strength password-strength-${strength.label.toLowerCase()}`}>
+          <div className="password-strength-head">
+            <span>Seguridad de contrasena</span>
+            <strong>{strength.label}</strong>
+          </div>
+          <div className="password-strength-track"><i style={{ width: `${strength.score}%` }} /></div>
+          <div className="password-checks">
+            {strength.checks.map(([key, label, ok]) => (
+              <span key={key} className={ok ? 'ok' : ''}>{ok ? 'OK' : '-'} {label}</span>
+            ))}
+          </div>
+        </div>
+        <button className="btn-full" disabled={loading}>{loading ? 'Guardando...' : 'Guardar nueva contrasena'}</button>
+        {message && <div className="auth-error">{message}</div>}
+      </form>
+    </AuthCard>
+  );
+}
+
 export function PinUnlock({ profile, onUnlock, onFullLogout }) {
   const [pin, setPin] = React.useState('');
   const [error, setError] = React.useState('');

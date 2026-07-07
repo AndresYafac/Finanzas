@@ -91,6 +91,7 @@ export function Deudas({ supabase, user, isAdmin, can = () => true }) {
       notify(error.message);
       return;
     }
+    notify('Cuenta por cobrar eliminada correctamente.', 'success');
     load();
   }
   async function save(event) {
@@ -145,6 +146,7 @@ export function Deudas({ supabase, user, isAdmin, can = () => true }) {
     setForm(emptyDebtForm);
     setEditingId(null);
     setOpen(false);
+    notify(editingId ? 'Cuenta por cobrar actualizada correctamente.' : 'Cuenta por cobrar creada correctamente.', 'success');
     load();
   }
   const visibleDeudas = tipoFilter === 'todos' ? deudas : deudas.filter((d) => d.tipo === tipoFilter);

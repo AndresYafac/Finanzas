@@ -5,7 +5,6 @@ import { updateMobilePin, updateProfile } from '../controllers/profile.controlle
 import { confirmAction } from '../services/feedback';
 import { getPasswordStrength, validatePassword } from '../utils/password';
 import { Button, Card, Field, FormActions, SelectField } from '../components/ui';
-import { AppearanceSettings } from '../components/AppearanceSettings';
 
 function initials(profile, email) {
   return ((profile?.nombre?.[0] || '') + (profile?.apellido?.[0] || '')).toUpperCase() || email?.[0]?.toUpperCase() || '?';
@@ -197,9 +196,6 @@ export function Perfil({ supabase, user, profile, onSaved }) {
           </div>
         </Card>
 
-        <Card title="Apariencia" className="appearance-card">
-          <AppearanceSettings userId={user.id} onStatus={setStatus} />
-        </Card>
       </div>
     </div>
   );

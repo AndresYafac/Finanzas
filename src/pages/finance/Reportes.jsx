@@ -13,6 +13,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Badge, Field, Modal, RowActions, SelectField, TableSection } from '../../components/ui';
+import { getCompanyConfig } from '../../config/visualConfig';
 import { confirmAction, notify } from '../../services/feedback';
 import { listReportesData } from '../../services/reportes.service';
 import { calcEstado, dateFmt, money, month, today } from '../../utils/format';
@@ -98,6 +99,8 @@ export function Reportes({ supabase, user, can = () => true }) {
     return map;
   }, {});
   const filteredTipos = tipos.filter((tipo) => !filters.tipo || tipo.tipo === filters.tipo);
+  const resumenClientesCount = Object.keys(summary).filter(Boolean).length;
+  const cuentasPorCobrarCount = filteredRows.length;
   const exportResumen = () => {
     if (!can('export')) return notify('No tienes permiso para exportar.');
     return downloadText(`fintrack-reporte-${today()}.json`, JSON.stringify({
@@ -205,6 +208,12 @@ export function Reportes({ supabase, user, can = () => true }) {
         <MetricCard icon={<TrendingDown />} label="Egresos filtrados" value={money(egresos)} helper={`${filteredMovimientos.filter((m) => m.tipo === 'egreso').length} movimientos`} danger />
         <MetricCard icon={<ClipboardList />} label="Presupuestos" value={presupuestos.length} helper="Controles configurados" />
         <MetricCard icon={<Target />} label="Metas activas" value={metas.filter((m) => m.estado === 'activa').length} helper={`${metas.length} metas registradas`} />
+      </div>
+      <div className="report-explain-card">
+        <strong>Resumen por cliente</strong>
+        <span>
+          Esta tabla agrupa las cuentas por cobrar segun los filtros seleccionados. Ahora se estan mostrando {resumenClientesCount} cliente(s) y {cuentasPorCobrarCount} cuenta(s) por cobrar dentro del rango {filters.desde || '-'} al {filters.hasta || '-'}.
+        </span>
       </div>
       <div className="action-bar"><div /><div className="table-actions">{can('export') && <button className="btn" onClick={exportPdf}><FileDown size={16} />Exportar PDF</button>}{can('export') && <button className="btn btn-primary" onClick={exportResumen}><FileDown size={16} />Exportar reporte JSON</button>}</div></div>
       <TableSection title="Resumen por cliente" columns={['Cliente', 'Total por cobrar', 'Cobrado', 'Saldo por cobrar', 'Estado']} rows={tableRows} onExport={can('export') ? exportClientesCsv : null} />

@@ -73,6 +73,7 @@ export function PagosPrestamosRecibidos({ supabase, user, can = () => true }) {
     if (!(await confirmAction('Eliminar este pago a acreedor? Se revertirá el saldo de la cuenta y el saldo por pagar.'))) return;
     const { error } = await eliminarPagoPrestamoRecibido(supabase, row.id);
     if (error) return notify(error.message);
+    notify('Pago a acreedor eliminado correctamente.', 'success');
     load();
   }
   async function save(event) {
@@ -96,6 +97,7 @@ export function PagosPrestamosRecibidos({ supabase, user, can = () => true }) {
     setForm(emptyForm);
     setEditingId(null);
     setOpen(false);
+    notify(editingId ? 'Pago a acreedor actualizado correctamente.' : 'Pago a acreedor registrado correctamente.', 'success');
     load();
   }
   return (
