@@ -294,6 +294,21 @@
     bottom: auto;
     left: 12px;
   }
+  .quick-actions {
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  .quick-actions-toggle {
+    width: 52px;
+    height: 52px;
+    border-radius: 18px;
+  }
+  .quick-actions-menu {
+    max-width: calc(100vw - 32px);
+  }
+  .quick-actions-menu button {
+    min-width: 210px;
+  }
   .dialog-overlay {
     align-items: flex-end;
   }
@@ -344,6 +359,13 @@
     transform: translateX(-105%);
     transition: transform .25s ease;
     overflow: hidden;
+  }
+
+  :root[data-layout-side="right"] .layout-mobile .sidebar {
+    left: auto;
+    right: 0;
+    border-radius: 24px 0 0 24px;
+    transform: translateX(105%);
   }
 
   .layout-mobile .sidebar.open {
@@ -443,12 +465,31 @@
     flex-direction: column;
   }
 
+  .dashboard-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-toolbar .btn,
+  .dashboard-period-tabs {
+    width: 100%;
+  }
+
+  .dashboard-period-tabs {
+    overflow-x: auto;
+  }
+
   .dashboard-options-grid {
     grid-template-columns: 1fr;
   }
 
   .dashboard-option-card {
     min-height: 82px;
+    grid-template-columns: 42px minmax(0, 1fr) 26px auto;
+  }
+
+  .comparison-grid {
+    grid-template-columns: 1fr;
   }
 
   .page-perfil {
@@ -515,6 +556,10 @@
   .appearance-color-control input[type="color"] {
     width: 48px;
     margin-left: auto;
+  }
+
+  .currency-grid {
+    grid-template-columns: 1fr;
   }
 
   .company-logo-manager {

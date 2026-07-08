@@ -1,19 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
-import { hideBusy, showBusy } from '../services/feedback';
+
+let cachedClient = null;
+let cachedSignature = '';
 
 export function createSupabaseClient(url, key) {
-  return createClient(url, key, {
-    global: {
-      fetch: async (...args) => {
-        showBusy('Procesando...');
-        try {
-          return await fetch(...args);
-        } finally {
-          hideBusy();
-        }
-      },
-    },
-  });
+  const cleanUrl = String(url || '').trim().replace(/\/+$/, '');
+  const cleanKey = String(key || '').trim();
+  const signature = `${cleanUrl}|${cleanKey}`;
+  if (cachedClient && cachedSignature === signature) {
+    return cachedClient;
+  }
+  cachedSignature = signature;
+  cachedClient = createClient(cleanUrl, cleanKey);
+  return cachedClient;
 }
 
 export function createStoredClient() {

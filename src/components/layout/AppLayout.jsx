@@ -1,6 +1,7 @@
 import React from 'react';
-import { Download, LogOut, Menu, RefreshCw } from 'lucide-react';
+import { Banknote, CreditCard, Download, LogOut, Menu, Plus, RefreshCw, Target, UserPlus, Wallet } from 'lucide-react';
 import { Button } from '../ui';
+import { useOfflineSync } from '../../hooks/useOfflineSync';
 
 function initials(profile, email) {
   return ((profile?.nombre?.[0] || '') + (profile?.apellido?.[0] || '')).toUpperCase() || email?.[0]?.toUpperCase() || '?';
@@ -136,9 +137,32 @@ export function AppLayout({
   LogoIcon,
   logoUrl,
 }) {
+  const [quickOpen, setQuickOpen] = React.useState(false);
+  const { pendingCount } = useOfflineSync();
+  const quickActions = [
+    ['clientes', 'Nuevo cliente', UserPlus],
+    ['cuentas', 'Nueva cuenta', Wallet],
+    ['movimientos', 'Movimiento', Banknote],
+    ['deudas', 'Cuenta por cobrar', Plus],
+    ['pagos', 'Registrar cobro', CreditCard],
+    ['metas', 'Nueva meta', Target],
+  ];
+  React.useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
+        event.preventDefault();
+        setQuickOpen((value) => !value);
+      }
+      if (event.key === 'Escape') setQuickOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   return (
     <div className={`layout ${sidebarHidden ? 'sidebar-hidden' : ''} ${isMobile ? 'layout-mobile' : ''} ${sidebarOpen ? 'sidebar-open' : ''}`}>
-      <div className={`offline-indicator ${offline ? 'visible' : ''}`}>Sin conexión. Algunas funciones pueden no estar disponibles.</div>
+      <div className={`offline-indicator ${offline || pendingCount ? 'visible' : ''}`}>
+        {offline ? 'Sin conexion. Las operaciones pendientes se sincronizaran al volver la conexion.' : `${pendingCount} operaciones pendientes por sincronizar.`}
+      </div>
       {isMobile && <button className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`} type="button" aria-label="Cerrar menú" onClick={onCloseMobileSidebar} />}
       <Sidebar pages={pages} page={page} profile={profile} user={user} isAdmin={isAdmin} sidebarOpen={sidebarOpen} onOpenPage={onOpenPage} onLogout={onLogout} LogoIcon={LogoIcon} logoUrl={logoUrl} />
       <main className="main">
@@ -159,6 +183,28 @@ export function AppLayout({
         {message && <div className="alert alert-danger">{message}</div>}
         {children}
       </main>
+      <div className={`quick-actions ${quickOpen ? 'open' : ''}`}>
+        {quickOpen && (
+          <div className="quick-actions-menu">
+            {quickActions.map(([id, label, Icon]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  onOpenPage(id);
+                  setQuickOpen(false);
+                }}
+              >
+                <Icon size={17} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <button className="quick-actions-toggle" type="button" onClick={() => setQuickOpen((value) => !value)} aria-label="Acciones rapidas" title="Acciones rapidas">
+          <Plus size={24} />
+        </button>
+      </div>
       {dialogs}
     </div>
   );

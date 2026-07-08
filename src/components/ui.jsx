@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Pencil, Search, Trash2 } from 'lucide-react';
+import { Download, FileText, Pencil, Search, Trash2 } from 'lucide-react';
 import { getCompanyConfig } from '../config/visualConfig';
 
 function AppLogoIcon({ size = 30 }) {
@@ -167,10 +167,64 @@ export function RowActions({ onEdit, onDelete, canEdit = true, canDelete = true 
   );
 }
 
+function cellToText(cell) {
+  if (cell === null || cell === undefined || typeof cell === 'boolean') return '';
+  if (typeof cell === 'string' || typeof cell === 'number') return String(cell);
+  if (Array.isArray(cell)) return cell.map(cellToText).filter(Boolean).join(' ');
+  if (React.isValidElement(cell)) return cellToText(cell.props?.children);
+  return String(cell);
+}
+
+function exportRowsToPdf(title, columns, rows) {
+  const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+  const safeTitle = escape(title);
+  const html = `<!doctype html>
+    <html>
+      <head>
+        <title>${safeTitle}</title>
+        <style>
+          body{font-family:Arial,sans-serif;color:#122033;margin:28px}
+          h1{font-size:22px;margin:0 0 4px}
+          .meta{color:#64748b;font-size:12px;margin-bottom:18px}
+          table{width:100%;border-collapse:collapse;font-size:12px}
+          th,td{border-bottom:1px solid #dbe5ee;padding:9px;text-align:left;vertical-align:top}
+          th{background:#f1f5f9;color:#475569;text-transform:uppercase;font-size:10px}
+          tr:nth-child(even) td{background:#fafafa}
+          @media print{body{margin:18px}}
+        </style>
+      </head>
+      <body>
+        <h1>${safeTitle}</h1>
+        <div class="meta">Generado: ${escape(new Date().toLocaleString('es-PE'))}</div>
+        <table>
+          <thead><tr>${columns.map((column) => `<th>${escape(column)}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${rows.length ? rows.map((row) => `<tr>${columns.map((_, index) => `<td>${escape(cellToText(row[index]))}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${columns.length}">Sin datos</td></tr>`}
+          </tbody>
+        </table>
+        <script>window.onload=()=>window.print();</script>
+      </body>
+    </html>`;
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+}
+
 export function TableSection({ title, columns, rows, search, setSearch, action, pageSize = 10, onExport }) {
   const [page, setPage] = React.useState(1);
   const [limit, setLimit] = React.useState(pageSize);
+  const [contextMenu, setContextMenu] = React.useState(null);
   React.useEffect(() => setPage(1), [rows.length, search, limit]);
+  React.useEffect(() => {
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('keydown', close);
+    };
+  }, []);
   const columnCount = Math.max(columns.length, ...rows.map((row) => row.length), 0);
   const visibleColumns = [...columns, ...Array.from({ length: columnCount - columns.length }, () => 'Acciones')];
   const totalPages = Math.max(1, Math.ceil(rows.length / limit));
@@ -180,8 +234,39 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
   return (
     <>
       {(setSearch || action) && <div className="action-bar"><div>{setSearch && <div className="search-wrap"><Search size={16} /><input className="search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Buscar ${title.toLowerCase()}...`} /></div>}</div>{action}</div>}
-      <Card title={title} action={onExport && <Button size="sm" onClick={onExport}><Download size={14} />Exportar CSV</Button>}>
-        <div className="table-wrap"><table><thead><tr>{visibleColumns.map((c, i) => <th key={`${c}-${i}`}>{c}</th>)}</tr></thead><tbody>{rows.length ? visibleRows.map((row, i) => <tr key={`${start}-${i}`}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>) : <tr><td colSpan={columnCount || columns.length}><EmptyState /></td></tr>}</tbody></table></div>
+      <Card
+        title={title}
+        action={(
+          <div className="table-actions">
+            <Button size="sm" onClick={() => exportRowsToPdf(title, visibleColumns, rows)}><FileText size={14} />Exportar PDF</Button>
+            {onExport && <Button size="sm" onClick={onExport}><Download size={14} />Exportar CSV</Button>}
+          </div>
+        )}
+      >
+        <div className="table-wrap">
+          <table>
+            <thead><tr>{visibleColumns.map((c, i) => <th key={`${c}-${i}`}>{c}</th>)}</tr></thead>
+            <tbody>
+              {rows.length ? visibleRows.map((row, i) => (
+                <tr
+                  key={`${start}-${i}`}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setContextMenu({ x: event.clientX, y: event.clientY, row });
+                  }}
+                >
+                  {row.map((cell, j) => <td key={j}>{cell}</td>)}
+                </tr>
+              )) : <tr><td colSpan={columnCount || columns.length}><EmptyState /></td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {contextMenu && (
+          <div className="table-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
+            <button type="button" onClick={() => navigator.clipboard?.writeText(contextMenu.row.map(cellToText).join(' | '))}>Copiar fila</button>
+            <button type="button" onClick={() => exportRowsToPdf(`${title} - fila`, visibleColumns, [contextMenu.row])}>Exportar fila PDF</button>
+          </div>
+        )}
         {rows.length > 0 && (
           <div className="pagination">
             <span>Mostrando {start + 1}-{Math.min(start + limit, rows.length)} de {rows.length}</span>

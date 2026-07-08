@@ -89,6 +89,7 @@ function App() {
   const [supabase, setSupabase] = React.useState(createStoredClient);
   const [session, setSession] = React.useState(null);
   const [profile, setProfile] = React.useState(null);
+  const [profileLoading, setProfileLoading] = React.useState(false);
   const [passwordRecovery, setPasswordRecovery] = React.useState(() => isRecoveryUrl());
   const [page, setPage] = React.useState(() => {
     const savedPage = storage.getRaw(LAST_PAGE_KEY);
@@ -182,9 +183,12 @@ function App() {
 
   React.useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => setSession(data.session || null));
+    supabase.auth.getSession().then(({ data }) => {
+      const nextSession = data.session || null;
+      setSession((current) => (current?.access_token === nextSession?.access_token ? current : nextSession));
+    });
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      setSession(nextSession);
+      setSession((current) => (current?.access_token === nextSession?.access_token ? current : nextSession));
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true);
         setMessage('');
@@ -197,22 +201,34 @@ function App() {
     async function loadProfile() {
       if (!supabase || !session?.user) {
         setProfile(null);
+        setProfileLoading(false);
         return;
       }
+      setProfileLoading(true);
       const { data, error } = await getProfile(supabase, session.user.id);
-      if (error) setMessage(error.message);
-      if (data && (data.activo === false || data.deleted_at)) {
+      if (error || !data) {
+        setMessage('Tu usuario ya no existe o fue eliminado del sistema.');
+        clearRememberedAccount();
+        await supabase.auth.signOut();
+        setSession(null);
+        setProfile(null);
+        setProfileLoading(false);
+        return;
+      }
+      if (data.activo === false || data.deleted_at) {
         setMessage('Tu usuario esta desactivado. Contacta al administrador.');
         clearRememberedAccount();
         await supabase.auth.signOut();
         setSession(null);
         setProfile(null);
+        setProfileLoading(false);
         return;
       }
-      setProfile(data || {});
+      setProfile(data);
+      setProfileLoading(false);
     }
     loadProfile();
-  }, [supabase, session, refreshKey]);
+  }, [supabase, session?.user?.id, refreshKey]);
 
   React.useEffect(() => {
     if (locked && profile && !profile.pin_hash) {
@@ -276,6 +292,18 @@ function App() {
     loadPermissions();
   }, [supabase, session?.user, profile]);
 
+  React.useEffect(() => {
+    if (!profile || locked) return;
+    const timer = window.setTimeout(() => {
+      import('./pages/Dashboard');
+      import('./pages/finance/Clientes');
+      import('./pages/finance/Cuentas');
+      import('./pages/finance/Movimientos');
+      import('./pages/finance/Reportes');
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [profile, locked]);
+
   if (!supabase) return <><Setup onReady={setSupabase} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (passwordRecovery && session) {
     return <><PasswordRecovery supabase={supabase} onComplete={(nextMessage) => {
@@ -287,6 +315,7 @@ function App() {
     }} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   }
   if (!session) return <><Auth supabase={supabase} message={message} setMessage={setMessage} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
+  if (profileLoading || !profile) return <><AuthCard title="FinTrack Pro"><p className="muted">Validando acceso...</p></AuthCard><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (locked && !profile) return <><AuthCard title="Desbloquear FinTrack"><p className="muted">Cargando cuenta recordada...</p></AuthCard><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (locked && profile?.pin_hash) {
     return <><PinUnlock supabase={supabase} profile={profile} onUnlock={() => {

@@ -1,3 +1,7 @@
+import { createEntityService } from './entity.service';
+
+export const metasService = createEntityService('metas');
+
 export function listMetas(supabase, adminId) {
   return supabase.from('metas').select('*').eq('admin_id', adminId).order('created_at', { ascending: false });
 }

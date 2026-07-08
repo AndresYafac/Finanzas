@@ -797,3 +797,32 @@
   border-color: rgba(var(--primary-rgb), .42);
   background: #0b1525;
 }
+
+:root[data-theme="dark"] .quick-actions-menu {
+  border-color: var(--border);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(var(--primary-rgb), .14), transparent 32%),
+    linear-gradient(180deg, rgba(20, 34, 56, .98), rgba(10, 19, 34, .98));
+  box-shadow: var(--shadow-strong);
+}
+
+:root[data-theme="dark"] .quick-actions-menu button {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .quick-actions-menu button:hover {
+  border-color: rgba(var(--primary-rgb), .34);
+  background: rgba(var(--primary-rgb), .12);
+  color: var(--primary);
+}
+
+:root[data-theme="dark"] .table-context-menu {
+  border-color: var(--border);
+  background: #10192a;
+  box-shadow: var(--shadow-strong);
+}
+
+:root[data-theme="dark"] .table-context-menu button:hover {
+  background: rgba(var(--primary-rgb), .12);
+  color: var(--primary);
+}

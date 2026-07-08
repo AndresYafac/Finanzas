@@ -15,6 +15,7 @@ import {
 import { Badge, Field, Modal, RowActions, SelectField, TableSection } from '../../components/ui';
 import { getCompanyConfig } from '../../config/visualConfig';
 import { confirmAction, notify } from '../../services/feedback';
+import { convertAmount, formatCurrency, getCurrencyConfig, summarizeByCurrency } from '../../services/currency.service';
 import { listReportesData } from '../../services/reportes.service';
 import { calcEstado, dateFmt, money, month, today } from '../../utils/format';
 import {
@@ -38,6 +39,7 @@ export function Reportes({ supabase, user, can = () => true }) {
   const [clientes, setClientes] = React.useState([]);
   const [cuentas, setCuentas] = React.useState([]);
   const [tipos, setTipos] = React.useState([]);
+  const [currencyConfig, setCurrencyConfig] = React.useState(getCurrencyConfig);
   const defaultFilters = React.useCallback(() => ({
     desde: `${month()}-01`,
     hasta: today(),
@@ -48,6 +50,22 @@ export function Reportes({ supabase, user, can = () => true }) {
   }), []);
   const [filters, setFilters] = React.useState(defaultFilters);
   const setFilter = (field, value) => setFilters((current) => ({ ...current, [field]: value }));
+  const applyQuickRange = (range) => {
+    const now = new Date();
+    const toIso = (date) => date.toISOString().slice(0, 10);
+    const end = toIso(now);
+    const start = new Date(now);
+    if (range === 'today') {
+      start.setTime(now.getTime());
+    } else if (range === 'week') {
+      start.setDate(now.getDate() - 6);
+    } else if (range === 'month') {
+      start.setDate(1);
+    } else if (range === 'last30') {
+      start.setDate(now.getDate() - 29);
+    }
+    setFilters((current) => ({ ...current, desde: toIso(start), hasta: end }));
+  };
   React.useEffect(() => {
     listReportesData(supabase, user.id).then(([deudasData, movimientosData, presupuestosData, metasData, clientesData, cuentasData, tiposData]) => {
       setRows(deudasData.data || []);
@@ -59,6 +77,11 @@ export function Reportes({ supabase, user, can = () => true }) {
       setTipos(tiposData.data || []);
     });
   }, [supabase, user.id]);
+  React.useEffect(() => {
+    const syncCurrency = () => setCurrencyConfig(getCurrencyConfig());
+    window.addEventListener('fintrack_currency_config', syncCurrency);
+    return () => window.removeEventListener('fintrack_currency_config', syncCurrency);
+  }, []);
   const inDateRange = (fecha) => (!filters.desde || fecha >= filters.desde) && (!filters.hasta || fecha <= filters.hasta);
   const filteredRows = rows.filter((d) => (
     (!filters.cliente_id || d.cliente_id === filters.cliente_id) &&
@@ -92,6 +115,8 @@ export function Reportes({ supabase, user, can = () => true }) {
   };
   const ingresos = filteredMovimientos.filter((m) => m.tipo === 'ingreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
   const egresos = filteredMovimientos.filter((m) => m.tipo === 'egreso').reduce((sum, m) => sum + Number(m.monto || 0), 0);
+  const balanceConsolidado = cuentas.reduce((sum, cuenta) => sum + convertAmount(cuenta.saldo, cuenta.moneda || 'PEN', currencyConfig.base, currencyConfig), 0);
+  const balancePorMoneda = summarizeByCurrency(cuentas, 'saldo', 'moneda');
   const movimientosPorTipo = filteredMovimientos.reduce((map, m) => {
     const key = `${m.tipo}:${m.tipos_movimiento?.nombre || m.categoria || 'Sin tipo'}`;
     map[key] ||= { tipo: m.tipo, categoria: m.tipos_movimiento?.nombre || m.categoria || 'Sin tipo', total: 0 };
@@ -177,6 +202,12 @@ export function Reportes({ supabase, user, can = () => true }) {
           <h3>Filtros del reporte</h3>
         </div>
         <div className="card-body">
+          <div className="quick-filter-row">
+            <button className="btn btn-sm" type="button" onClick={() => applyQuickRange('today')}>Hoy</button>
+            <button className="btn btn-sm" type="button" onClick={() => applyQuickRange('week')}>Ultimos 7 dias</button>
+            <button className="btn btn-sm" type="button" onClick={() => applyQuickRange('month')}>Este mes</button>
+            <button className="btn btn-sm" type="button" onClick={() => applyQuickRange('last30')}>Ultimos 30 dias</button>
+          </div>
           <div className="report-filter-grid">
             <Field label="Desde" type="date" value={filters.desde} onChange={(value) => setFilter('desde', value)} />
             <Field label="Hasta" type="date" value={filters.hasta} onChange={(value) => setFilter('hasta', value)} />
@@ -208,6 +239,13 @@ export function Reportes({ supabase, user, can = () => true }) {
         <MetricCard icon={<TrendingDown />} label="Egresos filtrados" value={money(egresos)} helper={`${filteredMovimientos.filter((m) => m.tipo === 'egreso').length} movimientos`} danger />
         <MetricCard icon={<ClipboardList />} label="Presupuestos" value={presupuestos.length} helper="Controles configurados" />
         <MetricCard icon={<Target />} label="Metas activas" value={metas.filter((m) => m.estado === 'activa').length} helper={`${metas.length} metas registradas`} />
+      </div>
+      <div className="report-explain-card">
+        <strong>Balance multi-moneda</strong>
+        <span>
+          Consolidado en {currencyConfig.base}: {formatCurrency(balanceConsolidado, currencyConfig.base)}.
+          {' '}Saldos originales: {Object.entries(balancePorMoneda).map(([currency, value]) => `${currency} ${Number(value).toFixed(2)}`).join(' / ') || 'sin cuentas'}.
+        </span>
       </div>
       <div className="report-explain-card">
         <strong>Resumen por cliente</strong>

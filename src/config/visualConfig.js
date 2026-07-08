@@ -15,6 +15,8 @@ export const DEFAULT_COMPANY_CONFIG = {
   visual_style: 'aurora',
   surface_style: 'glass',
   density: 'comfortable',
+  font_family: 'system',
+  layout_side: 'left',
 };
 
 function hexToRgb(hex, fallback = '29, 158, 117') {
@@ -44,6 +46,8 @@ export function getVisualConfig(userId) {
       visual_style: companyConfig.visual_style || DEFAULT_COMPANY_CONFIG.visual_style,
       surface_style: companyConfig.surface_style || DEFAULT_COMPANY_CONFIG.surface_style,
       density: companyConfig.density || DEFAULT_COMPANY_CONFIG.density,
+      font_family: companyConfig.font_family || DEFAULT_COMPANY_CONFIG.font_family,
+      layout_side: companyConfig.layout_side || DEFAULT_COMPANY_CONFIG.layout_side,
       ...(sharedConfig || {}),
       ...(userConfig || {}),
     };
@@ -64,6 +68,8 @@ export function applyVisualConfig(config = getVisualConfig()) {
   root.dataset.visualStyle = merged.visual_style || DEFAULT_COMPANY_CONFIG.visual_style;
   root.dataset.surfaceStyle = merged.surface_style || DEFAULT_COMPANY_CONFIG.surface_style;
   root.dataset.density = merged.density || DEFAULT_COMPANY_CONFIG.density;
+  root.dataset.fontFamily = merged.font_family || DEFAULT_COMPANY_CONFIG.font_family;
+  root.dataset.layoutSide = merged.layout_side || DEFAULT_COMPANY_CONFIG.layout_side;
   root.style.setProperty('--primary', merged.primary_color || DEFAULT_COMPANY_CONFIG.primary_color);
   root.style.setProperty('--primary-rgb', hexToRgb(merged.primary_color, '29, 158, 117'));
   root.style.setProperty('--accent', merged.accent_color || DEFAULT_COMPANY_CONFIG.accent_color);

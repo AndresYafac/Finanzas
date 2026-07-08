@@ -1,6 +1,7 @@
 ﻿import React from 'react';
-import { Check, Layers, Moon, Palette, SlidersHorizontal, Sparkles, Sun } from 'lucide-react';
+import { Check, Coins, LayoutPanelLeft, Layers, Moon, Palette, SlidersHorizontal, Sparkles, Sun, Type } from 'lucide-react';
 import { applyVisualConfig, DEFAULT_COMPANY_CONFIG, getVisualConfig, saveVisualConfig } from '../config/visualConfig';
+import { getCurrencyConfig, saveCurrencyConfig } from '../services/currency.service';
 import { Button, FormActions } from './ui';
 
 const PRESETS = [
@@ -32,6 +33,17 @@ const DENSITY_OPTIONS = [
   { value: 'compact', label: 'Compacta', description: 'Mas informacion en pantalla.' },
   { value: 'comfortable', label: 'Comoda', description: 'Equilibrio entre aire y datos.' },
   { value: 'spacious', label: 'Espaciada', description: 'Mas aire para uso tactil.' },
+];
+
+const FONT_OPTIONS = [
+  { value: 'system', label: 'Sistema', description: 'Fuente nativa del dispositivo.' },
+  { value: 'inter', label: 'Inter', description: 'Lectura moderna y limpia.' },
+  { value: 'serif', label: 'Serif', description: 'Estilo mas editorial.' },
+];
+
+const LAYOUT_OPTIONS = [
+  { value: 'left', label: 'Menu izquierda', description: 'Navegacion clasica.' },
+  { value: 'right', label: 'Menu derecha', description: 'Mayor alcance para usuarios diestros.' },
 ];
 
 function isPresetActive(visual, preset) {
@@ -67,6 +79,7 @@ function ColorControl({ label, value, onChange }) {
 
 export function AppearanceSettings({ userId, onStatus }) {
   const [visual, setVisual] = React.useState(() => getVisualConfig(userId));
+  const [currency, setCurrency] = React.useState(getCurrencyConfig);
 
   React.useEffect(() => {
     setVisual(getVisualConfig(userId));
@@ -87,12 +100,15 @@ export function AppearanceSettings({ userId, onStatus }) {
       density: visual.density || DEFAULT_COMPANY_CONFIG.density,
       primary_color: visual.primary_color || DEFAULT_COMPANY_CONFIG.primary_color,
       accent_color: visual.accent_color || DEFAULT_COMPANY_CONFIG.accent_color,
+      font_family: visual.font_family || DEFAULT_COMPANY_CONFIG.font_family,
+      layout_side: visual.layout_side || DEFAULT_COMPANY_CONFIG.layout_side,
     };
     saveVisualConfig(userId, next);
+    saveCurrencyConfig(currency);
     applyVisualConfig(next);
     setVisual(next);
     window.dispatchEvent(new Event('fintrack_visual_config'));
-    onStatus?.('Apariencia guardada correctamente.');
+    onStatus?.('Apariencia y moneda guardadas correctamente.');
   }
 
   const primary = visual.primary_color || DEFAULT_COMPANY_CONFIG.primary_color;
@@ -135,6 +151,33 @@ export function AppearanceSettings({ userId, onStatus }) {
             <div className="appearance-section appearance-color-grid">
               <ColorControl label="Color principal" value={primary} onChange={(value) => updateVisual({ primary_color: value })} />
               <ColorControl label="Color secundario" value={accent} onChange={(value) => updateVisual({ accent_color: value })} />
+            </div>
+
+            <div className="appearance-section appearance-option-group currency-settings">
+              <div className="appearance-section-title"><Coins size={16} /> Multi-moneda</div>
+              <div className="currency-grid">
+                <label>
+                  <span>Moneda base</span>
+                  <select value={currency.base} onChange={(event) => setCurrency((current) => ({ ...current, base: event.target.value }))}>
+                    <option value="PEN">Soles (PEN)</option>
+                    <option value="USD">Dolares (USD)</option>
+                    <option value="EUR">Euros (EUR)</option>
+                  </select>
+                </label>
+                {['PEN', 'USD', 'EUR'].map((code) => (
+                  <label key={code}>
+                    <span>Tasa {code}</span>
+                    <input
+                      type="number"
+                      min="0.0001"
+                      step="0.0001"
+                      value={currency.rates?.[code] || ''}
+                      onChange={(event) => setCurrency((current) => ({ ...current, rates: { ...current.rates, [code]: Number(event.target.value || 0) } }))}
+                    />
+                  </label>
+                ))}
+              </div>
+              <small className="muted">La tasa representa cuantas unidades de moneda base equivale 1 unidad de cada moneda. Puedes actualizarla manualmente.</small>
             </div>
 
             <div className="theme-live-preview appearance-preview">
@@ -184,6 +227,24 @@ export function AppearanceSettings({ userId, onStatus }) {
               <div className="appearance-choice-grid">
                 {DENSITY_OPTIONS.map((option) => (
                   <ChoiceCard key={option.value} option={option} icon={SlidersHorizontal} active={(visual.density || 'comfortable') === option.value} onClick={() => updateVisual({ density: option.value })} />
+                ))}
+              </div>
+            </div>
+
+            <div className="appearance-section appearance-option-group">
+              <div className="appearance-section-title"><Type size={16} /> Fuente</div>
+              <div className="appearance-choice-grid">
+                {FONT_OPTIONS.map((option) => (
+                  <ChoiceCard key={option.value} option={option} icon={Type} active={(visual.font_family || 'system') === option.value} onClick={() => updateVisual({ font_family: option.value })} />
+                ))}
+              </div>
+            </div>
+
+            <div className="appearance-section appearance-option-group">
+              <div className="appearance-section-title"><LayoutPanelLeft size={16} /> Layout</div>
+              <div className="appearance-choice-grid compact">
+                {LAYOUT_OPTIONS.map((option) => (
+                  <ChoiceCard key={option.value} option={option} icon={LayoutPanelLeft} active={(visual.layout_side || 'left') === option.value} onClick={() => updateVisual({ layout_side: option.value })} />
                 ))}
               </div>
             </div>

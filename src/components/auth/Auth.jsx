@@ -46,7 +46,13 @@ export function Auth({ supabase, message, setMessage }) {
           password: form.password,
           remember,
         });
-        if (error) setMessage(friendlyAuthError(error));
+        if (error) {
+          if (error.clearRemembered) {
+            setRemember(false);
+            setForm((current) => ({ ...current, email: '' }));
+          }
+          setMessage(friendlyAuthError(error));
+        }
         return;
       }
 
