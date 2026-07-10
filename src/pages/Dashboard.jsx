@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowDown, ArrowUp, Banknote, BarChart3, Check, CreditCard, FileText, Maximize2, Settings, Settings2, TrendingUp, Wallet } from 'lucide-react';
+import { Banknote, BarChart3, Check, CreditCard, FileText, Maximize2, Settings, Settings2, TrendingUp, Wallet } from 'lucide-react';
 import { Button, Card, EmptyState, Modal } from '../components/ui';
 import { getDashboardData } from '../services/dashboard.service';
 import { DynamicChart } from '../components/DynamicChart';
@@ -56,20 +56,58 @@ function normalizeChartConfigs(configs) {
 }
 
 function MetricCard({ icon, label, value, helper, danger = false, chart }) {
-  return <div className="metric-card"><div className="metric-label">{icon}{label}</div><div className={`metric-value ${danger ? 'danger-text' : ''}`}>{value}</div>{chart}<div className="metric-change neutral">{helper}</div></div>;
+  const valueClass = "metric-value " + (danger ? "danger-text" : "");
+  return (
+    <div className="metric-card" title={String(label) + ": " + String(value) + ". " + String(helper || "")}>
+      <div className="metric-label">{icon}{label}</div>
+      <div className={valueClass}>{value}</div>
+      {chart}
+      <div className="metric-change neutral">{helper}</div>
+    </div>
+  );
 }
-
 function MiniBarChart({ items, danger = false, split = false }) {
   const cleanItems = items.filter((item) => Number(item.value || 0) > 0).slice(0, 8);
   const max = Math.max(...cleanItems.map((item) => Number(item.value || 0)), 1);
   if (!cleanItems.length) return <div className="mini-chart-empty">Sin datos para grafico</div>;
+  const chartStyle = {
+    display: 'grid',
+    gap: 7,
+    marginTop: 14,
+    width: '100%',
+    minWidth: '100%',
+    justifySelf: 'stretch',
+    alignSelf: 'stretch',
+  };
+  const rowStyle = {
+    display: 'grid',
+    gridTemplateColumns: '104px minmax(min(220px, 45vw), 1fr) max-content',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+    minWidth: '100%',
+  };
+  const labelStyle = {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  };
+  const trackStyle = {
+    width: '100%',
+    minWidth: 'min(220px, 45vw)',
+  };
+  const valueStyle = {
+    justifySelf: 'end',
+    whiteSpace: 'nowrap',
+  };
   return (
-    <div className="mini-chart">
+    <div className="mini-chart" style={chartStyle}>
       {cleanItems.map((item, index) => (
-        <div className="mini-chart-row" key={`${item.label}-${index}`}>
-          <span>{item.label}</span>
-          <div className="mini-chart-track"><i className={`${danger ? 'danger' : ''} ${split && index === 1 ? 'danger' : ''}`} style={{ width: `${Math.max(8, (Number(item.value || 0) / max) * 100)}%` }} /></div>
-          <b>{money(item.value)}</b>
+        <div className="mini-chart-row" key={`${item.label}-${index}`} style={rowStyle}>
+          <span style={labelStyle}>{item.label}</span>
+          <div className="mini-chart-track" style={trackStyle}><i className={`${danger ? 'danger' : ''} ${split && index === 1 ? 'danger' : ''}`} style={{ width: `${Math.max(8, (Number(item.value || 0) / max) * 100)}%` }} /></div>
+          <b style={valueStyle}>{money(item.value)}</b>
         </div>
       ))}
     </div>
@@ -149,17 +187,6 @@ export function Dashboard({ supabase, user, isAdmin }) {
   function toggleDraftCard(id) {
     setDraftCards((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
-  function moveDraftCard(id, direction) {
-    setDraftCards((current) => {
-      const index = current.indexOf(id);
-      if (index < 0) return current;
-      const target = direction === 'up' ? index - 1 : index + 1;
-      if (target < 0 || target >= current.length) return current;
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  }
   const openChartConfig = React.useCallback(() => {
     setChartConfigOpen(true);
   }, []);
@@ -191,7 +218,6 @@ export function Dashboard({ supabase, user, isAdmin }) {
   const movimientosMes = data.movimientos.filter((movimiento) => movimiento.fecha?.startsWith(currentMonth));
   const balanceTotal = data.cuentas.reduce((sum, cuenta) => sum + convertAmount(cuenta.saldo, cuenta.moneda || 'PEN', currencyConfig.base, currencyConfig), 0);
   const balanceByCurrency = summarizeByCurrency(data.cuentas, 'saldo', 'moneda');
-  const cobradoDeudas = data.deudas.reduce((sum, deuda) => sum + Number(deuda.monto_pagado || 0), 0);
   const pagosPorDia = data.pagos
     .filter((pago) => pago.fecha?.startsWith(month()))
     .reduce((map, pago) => {
@@ -201,7 +227,6 @@ export function Dashboard({ supabase, user, isAdmin }) {
     }, {});
   const accountChart = data.cuentas.map((cuenta) => ({ label: cuenta.banco, value: Number(cuenta.saldo || 0) }));
   const debtChart = [
-    { label: 'Cobrado', value: cobradoDeudas },
     { label: 'Saldo por cobrar', value: pendiente },
   ];
   const paymentsChart = Object.entries(pagosPorDia).slice(-8).map(([label, value]) => ({ label, value }));
@@ -212,8 +237,6 @@ export function Dashboard({ supabase, user, isAdmin }) {
   const ahorroActual = ingresos - egresos;
   const ahorroAnterior = ingresosMesAnterior - egresosMesAnterior;
   const variacionAhorro = ahorroAnterior ? Math.round(((ahorroActual - ahorroAnterior) / Math.abs(ahorroAnterior)) * 100) : 0;
-  const promedioIngresoDiario = movimientosMes.filter((m) => m.tipo === 'ingreso').reduce((sum, m) => sum + Number(m.monto || 0), 0) / Math.max(1, new Date().getDate());
-  const proyeccionIngreso = promedioIngresoDiario * new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
   function exportDashboardPdf() {
     const html = `<!doctype html><html><head><title>Dashboard FinTrack</title><style>
       body{font-family:Arial,sans-serif;margin:28px;color:#122033} h1{margin:0 0 6px}.muted{color:#64748b;font-size:12px;margin-bottom:18px}
@@ -221,12 +244,12 @@ export function Dashboard({ supabase, user, isAdmin }) {
       .label{color:#64748b;text-transform:uppercase;font-size:11px;font-weight:700}.value{font-size:24px;font-weight:900;margin-top:8px}
       ul{margin:8px 0 0 18px;padding:0} li{margin:5px 0}
     </style></head><body>
-      <h1>Dashboard FinTrack</h1><div class="muted">Generado: ${new Date().toLocaleString('es-PE')} · Moneda base: ${currencyConfig.base}</div>
+      <h1>Dashboard FinTrack</h1><div class="muted">Generado: ${new Date().toLocaleString('es-PE')} - Moneda base: ${currencyConfig.base}</div>
       <div class="cards">
         <div class="card"><div class="label">Balance consolidado</div><div class="value">${formatCurrency(balanceTotal, currencyConfig.base)}</div></div>
         <div class="card"><div class="label">Pendiente por cobrar</div><div class="value">${money(pendiente)}</div></div>
         <div class="card"><div class="label">Ingresos / Egresos</div><div class="value">${money(ingresos)} / ${money(egresos)}</div></div>
-        <div class="card"><div class="label">Proyeccion ingresos mes</div><div class="value">${money(proyeccionIngreso)}</div></div>
+        <div class="card"><div class="label">Cobros del mes</div><div class="value">${money(pagosMes)}</div></div>
       </div>
       <h2>Alertas</h2><ul>${porVencer.map((d) => `<li>${d.descripcion || 'Cuenta'}: ${money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}</li>`).join('') || '<li>Sin alertas</li>'}</ul>
       <script>window.onload=()=>window.print()</script></body></html>`;
@@ -271,28 +294,12 @@ export function Dashboard({ supabase, user, isAdmin }) {
       </div>
       <div className="metrics-grid">
         {visibleCards.map((cardId) => {
-          if (cardId === 'balance') return <MetricCard key={cardId} icon={<Wallet />} label={`Balance consolidado (${currencyConfig.base})`} value={formatCurrency(balanceTotal, currencyConfig.base)} helper={`${data.cuentas.length} cuentas · ${Object.entries(balanceByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(' / ') || 'sin saldos'}`} chart={<MiniBarChart items={accountChart} />} />;
-          if (cardId === 'pendiente') return <MetricCard key={cardId} icon={<CreditCard />} label="Cuentas por cobrar" value={money(pendiente)} helper={`${data.deudas.filter((deuda) => calcEstado(deuda) !== 'pagado').length} cuentas activas`} danger chart={<MiniBarChart items={debtChart} danger />} />;
-          if (cardId === 'pagos') return <MetricCard key={cardId} icon={<Banknote />} label="Cobros del mes" value={money(pagosMes)} helper={`${data.pagos.filter((pago) => pago.fecha?.startsWith(currentMonth)).length} cobros`} chart={<MiniBarChart items={paymentsChart} />} />;
-          if (cardId === 'movimientos') return <MetricCard key={cardId} icon={<TrendingUp />} label="Ingresos y egresos" value={`${money(ingresos)} / ${money(egresos)}`} helper={`Ahorro ${money(ahorroActual)} · variacion ${variacionAhorro}%`} chart={<MiniBarChart items={movementChart} split />} />;
+          if (cardId === 'balance') return <MetricCard key={cardId} icon={<Wallet />} label={`Balance consolidado (${currencyConfig.base})`} value={formatCurrency(balanceTotal, currencyConfig.base)} helper={`${data.cuentas.length} cuentas - ${Object.entries(balanceByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(' / ') || 'sin saldos'}`} trend={balanceTotal > 0 ? 'up' : 'neutral'} chart={<MiniBarChart items={accountChart} />} />;
+          if (cardId === 'pendiente') return <MetricCard key={cardId} icon={<CreditCard />} label="Cuentas por cobrar" value={money(pendiente)} helper={`${data.deudas.filter((deuda) => calcEstado(deuda) !== 'pagado').length} cuentas activas`} danger trend="down" chart={<MiniBarChart items={debtChart} danger />} />;
+          if (cardId === 'pagos') return <MetricCard key={cardId} icon={<Banknote />} label="Cobros del mes" value={money(pagosMes)} helper={`${data.pagos.filter((pago) => pago.fecha?.startsWith(currentMonth)).length} cobros`} trend={pagosMes > 0 ? 'up' : 'neutral'} chart={<MiniBarChart items={paymentsChart} />} />;
+          if (cardId === 'movimientos') return <MetricCard key={cardId} icon={<TrendingUp />} label="Ingresos y egresos" value={`${money(ingresos)} / ${money(egresos)}`} helper={`Ahorro ${money(ahorroActual)} - variacion ${variacionAhorro}%`} trend={ingresos >= egresos ? 'up' : 'down'} chart={<MiniBarChart items={movementChart} split />} />;
           return null;
         })}
-      </div>
-      <div className="grid-2 dashboard-extra">
-        <Card title="Comparativa mes a mes">
-          <div className="card-body comparison-grid">
-            <div><span>Ingresos mes anterior</span><strong>{money(ingresosMesAnterior)}</strong></div>
-            <div><span>Egresos mes anterior</span><strong>{money(egresosMesAnterior)}</strong></div>
-            <div><span>Ahorro actual</span><strong>{money(ahorroActual)}</strong></div>
-            <div><span>Variacion ahorro</span><strong>{variacionAhorro}%</strong></div>
-          </div>
-        </Card>
-        <Card title="Proyeccion del mes">
-          <div className="card-body comparison-grid">
-            <div><span>Ingreso proyectado</span><strong>{money(proyeccionIngreso)}</strong></div>
-            <div><span>Promedio diario</span><strong>{money(promedioIngresoDiario)}</strong></div>
-          </div>
-        </Card>
       </div>
       {!visibleCards.length && <Card className="empty-dashboard"><div className="card-body muted">Activa al menos una tarjeta desde Configurar dashboard.</div></Card>}
       <div className="grid-2">
@@ -351,24 +358,28 @@ export function Dashboard({ supabase, user, isAdmin }) {
             </div>
             <span>{draftCards.length}/{DASHBOARD_CARD_OPTIONS.length} activas</span>
           </div>
+          <div className="dashboard-config-help">Las tarjetas ocultas no se muestran en el dashboard. El orden se mantiene segun esta lista.</div>
           <div className="dashboard-options-grid">
             {DASHBOARD_CARD_OPTIONS.map((card) => {
               const active = draftCards.includes(card.id);
               const Icon = card.Icon;
               return (
-                <div key={card.id} className={`dashboard-option-card ${active ? 'active' : ''}`} role="button" tabIndex={0} onClick={() => toggleDraftCard(card.id)} onKeyDown={(event) => { if (event.key === 'Enter') toggleDraftCard(card.id); }}>
+                <div
+                  key={card.id}
+                  className={`dashboard-option-card ${active ? 'active' : ''}`}
+                >
                   <span className="dashboard-option-icon"><Icon size={22} /></span>
                   <span className="dashboard-option-copy">
                     <b>{card.label}</b>
                     <small>{card.description}</small>
                   </span>
-                  <span className="dashboard-option-check">{active ? <Check size={16} /> : null}</span>
-                  {active && (
-                    <span className="dashboard-option-order">
-                      <button type="button" onClick={(event) => { event.stopPropagation(); moveDraftCard(card.id, 'up'); }}><ArrowUp size={14} /></button>
-                      <button type="button" onClick={(event) => { event.stopPropagation(); moveDraftCard(card.id, 'down'); }}><ArrowDown size={14} /></button>
-                    </span>
-                  )}
+                  <button
+                    type="button"
+                    className={`dashboard-option-toggle ${active ? 'active' : ''}`}
+                    onClick={() => toggleDraftCard(card.id)}
+                  >
+                    {active ? <><Check size={15} /> Visible</> : 'Activar'}
+                  </button>
                 </div>
               );
             })}
@@ -388,3 +399,4 @@ export function Dashboard({ supabase, user, isAdmin }) {
     </div>
   );
 }
+

@@ -1,0 +1,197 @@
+/*
+  Animaciones seguras:
+  - No cambian ancho, alto, display, position, z-index ni layout.
+  - No modifican modales.
+  - Solo usan transform, opacity, box-shadow y background-position.
+*/
+
+:root {
+  --motion-fast: 140ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+  --motion-ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+.btn,
+.btn-full,
+.nav-item,
+.auth-tab,
+.quick-actions-toggle,
+.dashboard-period-tabs button,
+.dashboard-option-card,
+.chart-type-card,
+.data-source-card,
+.checkbox-option {
+  transition:
+    transform var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-base) var(--motion-ease),
+    border-color var(--motion-base) var(--motion-ease),
+    background-color var(--motion-base) var(--motion-ease),
+    color var(--motion-base) var(--motion-ease);
+}
+
+.btn:hover:not(:disabled),
+.btn-full:hover:not(:disabled),
+.dashboard-period-tabs button:hover,
+.chart-type-card:hover,
+.data-source-card:hover,
+.checkbox-option:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled),
+.btn-full:active:not(:disabled),
+.dashboard-period-tabs button:active,
+.chart-type-card:active,
+.data-source-card:active,
+.checkbox-option:active {
+  transform: translateY(0) scale(.99);
+}
+
+.card,
+.metric-card,
+.account-card,
+.chart-card,
+.appearance-panel,
+.permission-row-card,
+.dashboard-option-card {
+  transition:
+    transform var(--motion-base) var(--motion-ease),
+    box-shadow var(--motion-base) var(--motion-ease),
+    border-color var(--motion-base) var(--motion-ease),
+    background-color var(--motion-base) var(--motion-ease);
+}
+
+.card:hover,
+.metric-card:hover,
+.account-card:hover,
+.chart-card:hover {
+  transform: translateY(-2px);
+}
+
+.account-card-hover:hover .account-card-actions {
+  transition:
+    opacity var(--motion-base) var(--motion-ease),
+    transform var(--motion-base) var(--motion-ease);
+}
+
+.toast {
+  animation: toast-soft-enter var(--motion-slow) var(--motion-ease) both;
+}
+
+.dialog-card,
+.busy-card {
+  animation: panel-soft-enter var(--motion-slow) var(--motion-ease) both;
+}
+
+.table-wrap tbody tr {
+  animation: row-soft-enter 180ms var(--motion-ease) both;
+}
+
+.progress-bar span,
+.mini-chart-track i,
+.password-strength-track i {
+  transition:
+    width var(--motion-slow) var(--motion-ease),
+    background-color var(--motion-base) var(--motion-ease);
+}
+
+.metric-card .mini-chart,
+.metric-card .mini-chart-row,
+.metric-card .mini-chart-track,
+.metric-card .mini-chart-empty {
+  width: 100%;
+  min-width: 0;
+}
+
+.metric-card .mini-chart-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric-card .mini-chart-row span {
+  flex: 0 0 130px;
+}
+
+.metric-card .mini-chart-track {
+  flex: 1 1 auto;
+}
+
+.metric-card .mini-chart-row b {
+  flex: 0 0 auto;
+}
+
+.skeleton,
+.skeleton-row {
+  background-size: 220% 100%;
+  animation: skeleton-soft-flow 1.4s ease-in-out infinite;
+}
+
+.alerts-button.has-new,
+.alerts-count,
+.badge.has-new {
+  animation: notification-soft-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes toast-soft-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes panel-soft-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes row-soft-enter {
+  from {
+    opacity: .82;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes skeleton-soft-flow {
+  0% {
+    background-position: 180% 0;
+  }
+  100% {
+    background-position: -180% 0;
+  }
+}
+
+@keyframes notification-soft-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}

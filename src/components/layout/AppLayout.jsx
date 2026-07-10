@@ -183,28 +183,30 @@ export function AppLayout({
         {message && <div className="alert alert-danger">{message}</div>}
         {children}
       </main>
-      <div className={`quick-actions ${quickOpen ? 'open' : ''}`}>
-        {quickOpen && (
-          <div className="quick-actions-menu">
-            {quickActions.map(([id, label, Icon]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => {
-                  onOpenPage(id);
-                  setQuickOpen(false);
-                }}
-              >
-                <Icon size={17} />
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        <button className="quick-actions-toggle" type="button" onClick={() => setQuickOpen((value) => !value)} aria-label="Acciones rapidas" title="Acciones rapidas">
-          <Plus size={24} />
-        </button>
-      </div>
+      {isMobile && (
+        <div className={`quick-actions ${quickOpen ? 'open' : ''}`}>
+          {quickOpen && (
+            <div className="quick-actions-menu">
+              {quickActions.map(([id, label, Icon]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    onOpenPage(id);
+                    setQuickOpen(false);
+                  }}
+                >
+                  <Icon size={17} />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button className="quick-actions-toggle" type="button" onClick={() => setQuickOpen((value) => !value)} aria-label="Acciones rapidas" title="Acciones rapidas">
+            <Plus size={24} />
+          </button>
+        </div>
+      )}
       {dialogs}
     </div>
   );

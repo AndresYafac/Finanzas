@@ -82,7 +82,6 @@ export function DynamicChart({ type = 'bar', data = [], config = {}, height = 30
   const gridProps = showGrid ? <CartesianGrid strokeDasharray="3 3" stroke={theme.border} /> : null;
   const tooltipProps = showTooltip ? <Tooltip contentStyle={{ borderRadius: '12px', border: `1px solid ${theme.border}`, background: theme.surface, color: theme.text }} /> : null;
   const legendProps = showLegend ? <Legend /> : null;
-
   const renderChart = () => {
     switch (type) {
       case 'line':

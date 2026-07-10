@@ -1,6 +1,14 @@
-export const today = () => new Date().toISOString().slice(0, 10);
+const pad = (value) => String(value).padStart(2, '0');
 
-export const month = () => new Date().toISOString().slice(0, 7);
+export const today = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+export const month = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}`;
+};
 
 export const money = (value) =>
   `S/ ${Number(value || 0).toLocaleString('es-PE', {

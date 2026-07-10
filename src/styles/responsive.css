@@ -267,17 +267,24 @@
     max-width: 100vw;
     max-height: 88vh;
     border-radius: 26px 26px 0 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .modal-body {
-    padding: 20px 20px 96px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 20px;
   }
 
   .modal-footer {
-    position: sticky;
-    bottom: 0;
+    position: static;
+    flex: 0 0 auto;
     flex-direction: column-reverse;
     padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
   }
 
   .modal-footer .btn {
@@ -485,11 +492,16 @@
 
   .dashboard-option-card {
     min-height: 82px;
-    grid-template-columns: 42px minmax(0, 1fr) 26px auto;
+    grid-template-columns: 42px minmax(0, 1fr);
   }
 
-  .comparison-grid {
-    grid-template-columns: 1fr;
+  .dashboard-option-toggle,
+  .dashboard-option-position {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-option-toggle {
+    width: 100%;
   }
 
   .page-perfil {
