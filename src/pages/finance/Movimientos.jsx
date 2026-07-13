@@ -144,6 +144,17 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
     load();
   }
   const tiposFiltrados = tipos.filter((t) => t.tipo === form.tipo);
+  const getLinkedAccount = React.useCallback(
+    (cuenta) => cuenta?.cuenta_vinculada_id ? cuentas.find((item) => item.id === cuenta.cuenta_vinculada_id) : null,
+    [cuentas],
+  );
+  const getSaldoOperativo = React.useCallback(
+    (cuenta) => {
+      const linkedAccount = getLinkedAccount(cuenta);
+      return linkedAccount ? linkedAccount.saldo : cuenta?.saldo;
+    },
+    [getLinkedAccount],
+  );
   return (
     <>
       <TableSection
@@ -162,7 +173,11 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
             </SelectField>
             <SelectField label="Cuenta bancaria" value={form.cuenta_id} onChange={(v) => setForm({ ...form, cuenta_id: v })}>
               <option value="">Seleccionar cuenta...</option>
-              {cuentas.map((c) => <option key={c.id} value={c.id}>{c.banco} - {c.tipo} - {money(c.saldo)}</option>)}
+              {cuentas.map((c) => {
+                const linkedAccount = getLinkedAccount(c);
+                const linkedLabel = linkedAccount ? ` vinc. ${linkedAccount.banco}` : '';
+                return <option key={c.id} value={c.id}>{c.banco} - {c.tipo}{linkedLabel} - {money(getSaldoOperativo(c))}</option>;
+              })}
             </SelectField>
             <Field label="Concepto" value={form.concepto} onChange={(v) => setForm({ ...form, concepto: v })} required />
             <div className="form-row">

@@ -210,18 +210,21 @@ textarea { width: 100%; min-height: 80px; padding: 10px 14px; border: 1.5px soli
 .metric-value { font-size: 26px; font-weight: 900; color: var(--text); line-height: 1.05; }
 .metric-change { font-size: 12px; margin-top: 6px; font-weight: 600; }
 .metric-change.neutral { color: var(--text-muted); }
-.mini-chart { display: grid; gap: 7px; margin-top: 14px; width: 100%; }
+.metric-card-chart { display: block; width: 100%; min-width: 0; max-width: none; align-self: stretch; }
+.mini-chart { display: grid; gap: 7px; margin-top: 14px; width: 100%; max-width: none; }
 .mini-chart-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) max-content;
   align-items: center;
   gap: 8px;
   width: 100%;
+  min-width: 0;
   font-size: 11px;
   color: var(--text-muted);
 }
-.mini-chart-row span { flex: 0 0 130px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mini-chart-row b { flex: 0 0 auto; color: var(--text); font-size: 11px; white-space: nowrap; }
-.mini-chart-track { flex: 1 1 auto; width: 100%; min-width: 0; height: 8px; overflow: hidden; border-radius: 999px; background: #e7eef5; }
+.mini-chart-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-chart-row b { justify-self: end; color: var(--text); font-size: 11px; white-space: nowrap; }
+.mini-chart-track { width: 100%; min-width: 0; height: 8px; overflow: hidden; border-radius: 999px; background: #e7eef5; }
 .mini-chart-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), #67caa1); }
 .mini-chart-track i.danger { background: linear-gradient(90deg, #e24b4a, #f39a44); }
 .mini-chart-empty { margin-top: 14px; padding: 12px; border-radius: 12px; background: #f3f7fa; color: var(--text-muted); font-size: 12px; text-align: center; }

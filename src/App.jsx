@@ -488,8 +488,13 @@ function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
         .filter((m) => m.fecha_objetivo && m.fecha_objetivo <= today())
         .slice(0, 3)
         .map((m) => ({ page: 'metas', level: 'warning', title: 'Meta por revisar', text: `${m.nombre}: ${money(m.monto_actual)} / ${money(m.monto_objetivo)}` }));
+      const cuentasById = new Map(alertData.cuentas.map((cuenta) => [cuenta.id, cuenta]));
       const lowBalanceAlerts = alertData.cuentas
-        .filter((c) => Number(c.saldo || 0) <= 0)
+        .filter((c) => {
+          const isLinkedWallet = c.tipo_entidad === 'billetera' && c.cuenta_vinculada_id && cuentasById.has(c.cuenta_vinculada_id);
+          if (isLinkedWallet) return false;
+          return Number(c.saldo || 0) <= 0;
+        })
         .slice(0, 3)
         .map((c) => ({ page: 'cuentas', level: 'warning', title: 'Saldo bajo', text: `${c.banco || 'Cuenta'} ${c.tipo || ''}: ${money(c.saldo || 0)}` }));
       const receivedLoanAlerts = alertData.prestamosRecibidos

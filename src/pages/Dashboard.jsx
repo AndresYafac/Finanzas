@@ -58,10 +58,10 @@ function normalizeChartConfigs(configs) {
 function MetricCard({ icon, label, value, helper, danger = false, chart }) {
   const valueClass = "metric-value " + (danger ? "danger-text" : "");
   return (
-    <div className="metric-card" title={String(label) + ": " + String(value) + ". " + String(helper || "")}>
+    <div className="metric-card">
       <div className="metric-label">{icon}{label}</div>
       <div className={valueClass}>{value}</div>
-      {chart}
+      {chart && <div className="metric-card-chart">{chart}</div>}
       <div className="metric-change neutral">{helper}</div>
     </div>
   );
@@ -70,44 +70,13 @@ function MiniBarChart({ items, danger = false, split = false }) {
   const cleanItems = items.filter((item) => Number(item.value || 0) > 0).slice(0, 8);
   const max = Math.max(...cleanItems.map((item) => Number(item.value || 0)), 1);
   if (!cleanItems.length) return <div className="mini-chart-empty">Sin datos para grafico</div>;
-  const chartStyle = {
-    display: 'grid',
-    gap: 7,
-    marginTop: 14,
-    width: '100%',
-    minWidth: '100%',
-    justifySelf: 'stretch',
-    alignSelf: 'stretch',
-  };
-  const rowStyle = {
-    display: 'grid',
-    gridTemplateColumns: '104px minmax(min(220px, 45vw), 1fr) max-content',
-    alignItems: 'center',
-    gap: 8,
-    width: '100%',
-    minWidth: '100%',
-  };
-  const labelStyle = {
-    minWidth: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  };
-  const trackStyle = {
-    width: '100%',
-    minWidth: 'min(220px, 45vw)',
-  };
-  const valueStyle = {
-    justifySelf: 'end',
-    whiteSpace: 'nowrap',
-  };
   return (
-    <div className="mini-chart" style={chartStyle}>
+    <div className="mini-chart">
       {cleanItems.map((item, index) => (
-        <div className="mini-chart-row" key={`${item.label}-${index}`} style={rowStyle}>
-          <span style={labelStyle}>{item.label}</span>
-          <div className="mini-chart-track" style={trackStyle}><i className={`${danger ? 'danger' : ''} ${split && index === 1 ? 'danger' : ''}`} style={{ width: `${Math.max(8, (Number(item.value || 0) / max) * 100)}%` }} /></div>
-          <b style={valueStyle}>{money(item.value)}</b>
+        <div className="mini-chart-row" key={`${item.label}-${index}`}>
+          <span>{item.label}</span>
+          <div className="mini-chart-track"><i className={`${danger ? 'danger' : ''} ${split && index === 1 ? 'danger' : ''}`} style={{ width: `${Math.max(8, (Number(item.value || 0) / max) * 100)}%` }} /></div>
+          <b>{money(item.value)}</b>
         </div>
       ))}
     </div>

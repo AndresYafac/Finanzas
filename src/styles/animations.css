@@ -96,30 +96,38 @@
     background-color var(--motion-base) var(--motion-ease);
 }
 
+.metric-card .metric-card-chart,
 .metric-card .mini-chart,
 .metric-card .mini-chart-row,
 .metric-card .mini-chart-track,
 .metric-card .mini-chart-empty {
   width: 100%;
   min-width: 0;
+  max-width: none;
 }
 
 .metric-card .mini-chart-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) max-content;
   align-items: center;
   gap: 8px;
 }
 
 .metric-card .mini-chart-row span {
-  flex: 0 0 130px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .metric-card .mini-chart-track {
-  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
 }
 
 .metric-card .mini-chart-row b {
-  flex: 0 0 auto;
+  justify-self: end;
+  white-space: nowrap;
 }
 
 .skeleton,

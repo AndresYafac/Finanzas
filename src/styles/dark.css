@@ -132,6 +132,32 @@
   color: #a8b7c8;
 }
 
+:root[data-theme="dark"] .sort-button {
+  color: inherit;
+}
+
+:root[data-theme="dark"] .sort-button b {
+  background: rgba(var(--primary-rgb), .12);
+  color: var(--text-muted);
+}
+
+:root[data-theme="dark"] .sort-button:hover b,
+:root[data-theme="dark"] .sort-button.active b {
+  background: rgba(var(--primary-rgb), .24);
+  color: var(--primary);
+}
+
+:root[data-theme="dark"] .table-filter-row th {
+  border-color: var(--border);
+  background: rgba(11, 21, 37, .96);
+}
+
+:root[data-theme="dark"] .table-filter-row input {
+  border-color: var(--border);
+  background: #08111f;
+  color: var(--text);
+}
+
 :root[data-theme="dark"] tbody td {
   border-bottom-color: var(--border);
 }
@@ -842,5 +868,68 @@
 
 :root[data-theme="dark"] .table-context-menu button:hover {
   background: rgba(var(--primary-rgb), .12);
+  color: var(--primary);
+}
+
+:root[data-theme="dark"] .table-options-panel {
+  border-color: var(--border);
+  background: #10192a;
+  box-shadow: var(--shadow-strong);
+}
+
+:root[data-theme="dark"] .table-summary-grid {
+  border-color: var(--border);
+  background: rgba(10, 19, 34, .72);
+}
+
+:root[data-theme="dark"] .table-summary-card {
+  border-color: var(--border);
+  background: rgba(17, 31, 52, .9);
+}
+
+:root[data-theme="dark"] .table-selection-bar {
+  border-color: rgba(var(--primary-rgb), .24);
+  background: rgba(var(--primary-rgb), .12);
+}
+
+:root[data-theme="dark"] .table-selection-bar strong {
+  color: var(--primary);
+}
+
+:root[data-theme="dark"] .detail-item {
+  border-color: var(--border);
+  background: rgba(10, 19, 34, .74);
+}
+
+:root[data-theme="dark"] .table-density-options button,
+:root[data-theme="dark"] .table-column-options label {
+  border-color: var(--border);
+  background: rgba(10, 19, 34, .86);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .table-column-options input[type="checkbox"] {
+  accent-color: var(--primary);
+}
+
+:root[data-theme="dark"] .table-density-options button.active {
+  border-color: rgba(var(--primary-rgb), .48);
+  background: rgba(var(--primary-rgb), .14);
+  color: var(--primary);
+}
+
+:root[data-theme="dark"] .mobile-record-card {
+  border-color: var(--border);
+  background:
+    radial-gradient(circle at 96% 0%, rgba(var(--primary-rgb), .12), transparent 30%),
+    linear-gradient(180deg, rgba(17, 31, 52, .98), rgba(10, 19, 34, .98));
+  box-shadow: 0 18px 34px rgba(0, 0, 0, .26);
+}
+
+:root[data-theme="dark"] .mobile-record-details div {
+  background: rgba(10, 19, 34, .72);
+}
+
+:root[data-theme="dark"] .mobile-record-head b {
   color: var(--primary);
 }
