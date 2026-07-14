@@ -17,10 +17,6 @@ function bufferToBase64Url(buffer) {
   return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function textToBuffer(value) {
-  return new TextEncoder().encode(String(value || '')).buffer;
-}
-
 function serializeCredential(credential) {
   const response = credential.response;
   const payload = {
@@ -47,7 +43,7 @@ function prepareRegistrationOptions(options) {
     challenge: base64UrlToBuffer(options.challenge),
     user: {
       ...options.user,
-      id: textToBuffer(options.user.id),
+      id: base64UrlToBuffer(options.user.id),
     },
     excludeCredentials: (options.excludeCredentials || []).map((credential) => ({
       ...credential,

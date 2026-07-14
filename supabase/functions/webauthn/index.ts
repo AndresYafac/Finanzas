@@ -65,6 +65,10 @@ function base64UrlToUint8Array(value: string) {
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
+function textToUint8Array(value: string) {
+  return new TextEncoder().encode(value);
+}
+
 function getSupabaseClients(request: Request) {
   const url = Deno.env.get('SUPABASE_URL') || '';
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
@@ -162,7 +166,7 @@ Deno.serve(async (request) => {
       const options = await generateRegistrationOptions({
         rpName: 'FinTrack Pro',
         rpID,
-        userID: user.id,
+        userID: textToUint8Array(user.id),
         userName: user.email || profile.email_contacto || user.id,
         userDisplayName: [profile.nombre, profile.apellido].filter(Boolean).join(' ') || user.email || 'FinTrack',
         attestationType: 'none',

@@ -142,7 +142,8 @@ export function Notificaciones({ supabase, user }) {
                   </label>
                 ))}
               </div>
-              <SelectField label="Hora sugerida de recordatorio" value={String(preferences.reminder_hour)} onChange={(value) => updatePreference('reminder_hour', Number(value))}>
+              <p className="muted">La hora se usara cuando activemos el proceso automatico programado de alertas. Por ahora queda guardada como preferencia.</p>
+              <SelectField label="Hora para futuros recordatorios automaticos" value={String(preferences.reminder_hour)} onChange={(value) => updatePreference('reminder_hour', Number(value))}>
                 {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}
               </SelectField>
             </section>
