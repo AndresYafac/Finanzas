@@ -8,6 +8,7 @@ import {
   Database,
   LayoutDashboard,
   Bell,
+  Fingerprint,
   Palette,
   Search,
   ShieldCheck,
@@ -40,6 +41,8 @@ const lazyPage = (loader, exportName) => React.lazy(() => loader().then((module)
 
 const Dashboard = lazyPage(() => import('./pages/Dashboard'), 'Dashboard');
 const Perfil = lazyPage(() => import('./pages/Perfil'), 'Perfil');
+const Seguridad = lazyPage(() => import('./pages/Seguridad'), 'Seguridad');
+const Notificaciones = lazyPage(() => import('./pages/Notificaciones'), 'Notificaciones');
 const Apariencia = lazyPage(() => import('./pages/Apariencia'), 'Apariencia');
 const Clientes = lazyPage(() => import('./pages/finance/Clientes'), 'Clientes');
 const Cuentas = lazyPage(() => import('./pages/finance/Cuentas'), 'Cuentas');
@@ -73,6 +76,8 @@ const PAGE_IDS = [
   'backup',
   'auditoria',
   'perfil',
+  'seguridad',
+  'notificaciones',
   'apariencia',
   'usuarios-admin',
   'config',
@@ -279,6 +284,8 @@ export function App() {
     ]],
     ['sistema', [
       ['perfil', 'Mi perfil', UserCircle, true],
+      ['seguridad', 'Seguridad', Fingerprint, true],
+      ['notificaciones', 'Notificaciones', Bell, true],
       ['apariencia', 'Apariencia', Palette, true],
       ['usuarios-admin', 'Usuarios', Users, isAdmin],
       ['config', 'Configuracion', Settings, isAdmin],
@@ -329,6 +336,8 @@ export function App() {
         {page === 'backup' && <Backup supabase={supabase} user={session.user} can={(action) => can('backup', action)} />}
         {page === 'auditoria' && <Auditoria supabase={supabase} user={session.user} can={(action) => can('auditoria', action)} />}
         {page === 'perfil' && <Perfil supabase={supabase} user={session.user} profile={profile} onSaved={() => setRefreshKey((x) => x + 1)} />}
+        {page === 'seguridad' && <Seguridad supabase={supabase} user={session.user} profile={profile} onSaved={() => setRefreshKey((x) => x + 1)} />}
+        {page === 'notificaciones' && <Notificaciones supabase={supabase} user={session.user} />}
         {page === 'apariencia' && <Apariencia user={session.user} />}
         {page === 'usuarios-admin' && isAdmin && <UsuariosAdmin supabase={supabase} user={session.user} />}
         {page === 'config' && isAdmin && <Config onReady={setSupabase} />}
@@ -399,7 +408,9 @@ function pageTitle(page, isAdmin) {
     reportes: ['Reportes', 'Analisis financiero'],
     backup: ['Backup', 'Exportacion de datos'],
     auditoria: ['Auditoria', 'Historial de acciones importantes'],
-    perfil: ['Mi perfil', 'Informacion personal y seguridad'],
+    perfil: ['Mi perfil', 'Informacion personal'],
+    seguridad: ['Seguridad', 'PIN, biometria y contrasena'],
+    notificaciones: ['Notificaciones', 'Alertas push del dispositivo'],
     apariencia: ['Apariencia', 'Personalizacion visual del sistema'],
     'usuarios-admin': ['Usuarios', 'Activacion y control de accesos'],
     config: ['Configuracion', 'Conexion a base de datos'],

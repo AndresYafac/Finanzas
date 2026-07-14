@@ -18,7 +18,22 @@ export function updateAdminUserState(supabase, userId, active) {
   return supabase.rpc('admin_actualizar_usuario_estado', { p_user_id: userId, p_activo: active });
 }
 
-export function deleteAdminUser(supabase, userId) {
+export async function deleteAdminUser(supabase, userId) {
+  const edgeResult = await supabase.functions.invoke('admin-delete-user', {
+    body: { userId },
+  });
+
+  if (!edgeResult.error) {
+    return edgeResult;
+  }
+
+  const message = edgeResult.error?.message || '';
+  const isFunctionUnavailable = /failed to send|not found|404|function/i.test(message);
+
+  if (!isFunctionUnavailable) {
+    return edgeResult;
+  }
+
   return supabase.rpc('admin_eliminar_usuario', { p_user_id: userId });
 }
 

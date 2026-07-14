@@ -1,4 +1,5 @@
-﻿import { createEntityService } from './entity.service';
+import { validateFinanceOperationIfAvailable } from './backend.service';
+import { createEntityService } from './entity.service';
 
 export const prestamosRecibidosService = createEntityService('prestamos_recibidos');
 export const pagosPrestamosRecibidosService = createEntityService('pagos_prestamos_recibidos');
@@ -35,7 +36,14 @@ export function listPagosPrestamosRecibidosViewData(supabase, adminId) {
   ]);
 }
 
-export function registrarPrestamoOtorgado(supabase, payload) {
+export async function registrarPrestamoOtorgado(supabase, payload) {
+  const validation = await validateFinanceOperationIfAvailable(supabase, {
+    operation: 'prestamo_otorgado',
+    monto: payload.p_monto_total,
+    cuenta_id: payload.p_cuenta_desembolso_id,
+  });
+  if (validation.error || validation.data?.ok === false) return validation;
+
   return supabase.rpc('registrar_deuda_con_desembolso', { ...payload, p_tipo: 'Préstamo', p_desembolsar: true });
 }
 
@@ -59,7 +67,15 @@ export function eliminarPrestamoRecibido(supabase, prestamoId) {
   return supabase.rpc('eliminar_prestamo_recibido', { p_prestamo_id: prestamoId });
 }
 
-export function registrarPagoPrestamoRecibido(supabase, payload) {
+export async function registrarPagoPrestamoRecibido(supabase, payload) {
+  const validation = await validateFinanceOperationIfAvailable(supabase, {
+    operation: 'pago_prestamo_recibido',
+    monto: payload.p_monto,
+    cuenta_id: payload.p_cuenta_id,
+    prestamo_recibido_id: payload.p_prestamo_id,
+  });
+  if (validation.error || validation.data?.ok === false) return validation;
+
   return supabase.rpc('registrar_pago_prestamo_recibido', payload);
 }
 
@@ -70,4 +86,3 @@ export function actualizarPagoPrestamoRecibido(supabase, pagoId, payload) {
 export function eliminarPagoPrestamoRecibido(supabase, pagoId) {
   return supabase.rpc('eliminar_pago_prestamo_recibido', { p_pago_id: pagoId });
 }
-

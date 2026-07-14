@@ -630,7 +630,9 @@
     width: 100%;
   }
 
-  .page-perfil {
+  .page-perfil,
+  .page-seguridad,
+  .page-notificaciones {
     display: block;
     padding: 14px 12px 28px;
   }
@@ -644,24 +646,59 @@
   }
 
   .page-perfil .profile-main-card,
-  .page-perfil .profile-side,
-  .page-perfil .profile-side > .card {
+  .page-seguridad .security-card {
     width: 100%;
     min-width: 0;
   }
 
-  .page-perfil .profile-side {
-    display: flex;
-    flex-direction: column;
+  .page-seguridad .security-page {
+    width: 100%;
+  }
+
+  .page-notificaciones .notifications-page {
+    width: 100%;
+  }
+
+  .page-seguridad .security-stack {
+    grid-template-columns: 1fr;
     gap: 14px;
   }
 
-  .page-perfil .pin-card {
-    margin-top: 0;
+  .page-seguridad .security-password-form {
+    grid-column: auto;
+  }
+
+  .page-seguridad .security-form {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .page-seguridad .security-form .form-actions,
+  .page-perfil .profile-main-card .form-actions {
+    justify-content: stretch;
+  }
+
+  .page-seguridad .security-form .btn,
+  .page-perfil .profile-main-card .btn {
+    width: 100%;
   }
 
   .page-perfil .avatar-upload {
     align-items: flex-start;
+  }
+
+  .notification-hero,
+  .notification-device {
+    grid-template-columns: 1fr;
+  }
+
+  .notification-status-grid,
+  .notification-toggle-list {
+    grid-template-columns: 1fr;
+  }
+
+  .notification-actions .btn {
+    width: 100%;
   }
 
   .appearance-layout,

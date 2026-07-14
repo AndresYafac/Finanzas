@@ -1,4 +1,5 @@
 import { createEntityService } from './entity.service';
+import { validateFinanceOperationIfAvailable } from './backend.service';
 
 export const cuentasService = createEntityService('cuentas');
 
@@ -30,7 +31,15 @@ export function deleteCuenta(supabase, adminId, id) {
   return supabase.from('cuentas').delete().eq('id', id).eq('admin_id', adminId);
 }
 
-export function registrarTransferencia(supabase, payload) {
+export async function registrarTransferencia(supabase, payload) {
+  const validation = await validateFinanceOperationIfAvailable(supabase, {
+    operation: 'transferencia',
+    monto: payload.p_monto,
+    cuenta_origen_id: payload.p_cuenta_origen_id,
+    cuenta_destino_id: payload.p_cuenta_destino_id,
+  });
+  if (validation.error || validation.data?.ok === false) return validation;
+
   return supabase.rpc('registrar_transferencia', payload);
 }
 

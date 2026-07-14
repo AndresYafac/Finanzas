@@ -1,3 +1,5 @@
+import { validateFinanceOperationIfAvailable } from './backend.service';
+
 export function listPagosGenerales(supabase, adminId) {
   return supabase
     .from('pagos')
@@ -14,7 +16,15 @@ export function listPagoFormData(supabase, adminId) {
   ]);
 }
 
-export function registrarPago(supabase, payload) {
+export async function registrarPago(supabase, payload) {
+  const validation = await validateFinanceOperationIfAvailable(supabase, {
+    operation: 'pago_deuda',
+    monto: payload.p_monto,
+    cuenta_id: payload.p_cuenta_id,
+    deuda_id: payload.p_deuda_id,
+  });
+  if (validation.error || validation.data?.ok === false) return validation;
+
   return supabase.rpc('registrar_pago', payload);
 }
 

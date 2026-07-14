@@ -1,3 +1,5 @@
+import { validateFinanceOperationIfAvailable } from './backend.service';
+
 export function listMovimientosViewData(supabase, adminId) {
   return Promise.all([
     supabase.from('movimientos').select('*,tipos_movimiento(nombre),cuentas(banco,tipo)').eq('admin_id', adminId).order('fecha', { ascending: false }),
@@ -6,7 +8,15 @@ export function listMovimientosViewData(supabase, adminId) {
   ]);
 }
 
-export function registrarMovimiento(supabase, payload) {
+export async function registrarMovimiento(supabase, payload) {
+  const validation = await validateFinanceOperationIfAvailable(supabase, {
+    operation: payload.p_tipo,
+    tipo: payload.p_tipo,
+    monto: payload.p_monto,
+    cuenta_id: payload.p_cuenta_id,
+  });
+  if (validation.error || validation.data?.ok === false) return validation;
+
   return supabase.rpc('registrar_movimiento_financiero', payload);
 }
 

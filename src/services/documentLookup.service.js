@@ -1,3 +1,5 @@
+import { createStoredClient } from '../config/supabase';
+
 function fillTemplate(template, params) {
   return template
     .replaceAll('{tipo}', encodeURIComponent(params.tipo))
@@ -36,9 +38,35 @@ function normalizePerson(data) {
 }
 
 export async function lookupDocument({ tipo, documento }) {
+  const normalizedDoc = String(documento || '').trim();
+  const inferredType = normalizedDoc.length === 8 ? 'dni' : normalizedDoc.length === 11 ? 'ruc' : String(tipo || '').toLowerCase();
+  const supabase = createStoredClient();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.functions.invoke('lookup-document', {
+        body: {
+          tipo: inferredType,
+          documento: normalizedDoc,
+        },
+      });
+
+      if (!error && data?.data) {
+        const person = normalizePerson(data.data);
+        if (person?.nombre) return { data: person };
+      }
+
+      if (error || data?.error) {
+        console.warn('lookup-document edge function fallback:', error?.message || data?.error);
+      }
+    } catch (error) {
+      console.warn('lookup-document edge function fallback:', error);
+    }
+  }
+
   const url = resolveLookupUrl(tipo, documento);
   if (!url) {
-    return { error: 'Configura APISPERU_TOKEN en Vercel o VITE_APISPERU_TOKEN en local para habilitar la busqueda de documentos.' };
+    return { error: 'Configura APISPERU_TOKEN como secret de Supabase para habilitar la busqueda de documentos.' };
   }
   try {
     const response = await fetch(url, { headers: { accept: 'application/json' } });
