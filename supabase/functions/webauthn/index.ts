@@ -183,7 +183,7 @@ Deno.serve(async (request) => {
         userDisplayName: [profile.nombre, profile.apellido].filter(Boolean).join(' ') || user.email || 'FinTrack',
         attestationType: 'none',
         excludeCredentials: (existing || []).map((credential) => ({
-          id: base64UrlToUint8Array(credential.credential_id),
+          id: String(credential.credential_id || ''),
           type: 'public-key',
         })),
         authenticatorSelection: {
@@ -244,7 +244,7 @@ Deno.serve(async (request) => {
         rpID,
         userVerification: 'preferred',
         allowCredentials: credentials.map((credential) => ({
-          id: base64UrlToUint8Array(credential.credential_id),
+          id: String(credential.credential_id || ''),
           type: 'public-key',
           transports: credential.transports || undefined,
         })),
