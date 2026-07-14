@@ -421,6 +421,33 @@
     padding: 28px 22px;
     border-radius: 26px;
   }
+
+  #auth-screen {
+    min-height: 100dvh;
+    align-items: center;
+    padding: 18px;
+  }
+
+  #auth-screen .auth-logo {
+    margin-bottom: 24px;
+  }
+
+  #auth-screen .auth-logo h1 {
+    font-size: 25px;
+    line-height: 1.08;
+  }
+
+  .pin-unlock-form {
+    gap: 14px;
+  }
+
+  .pin-unlock-actions {
+    gap: 10px;
+  }
+
+  .pin-user {
+    padding: 10px;
+  }
   .toast {
     right: 12px;
     top: 12px;

@@ -729,6 +729,39 @@ textarea:focus {
   font-weight: 850;
 }
 
+.pin-unlock-form {
+  display: grid;
+  gap: 16px;
+}
+
+.pin-unlock-form .form-group {
+  margin: 0;
+}
+
+.pin-unlock-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.pin-unlock-actions .btn-full {
+  width: 100%;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pin-unlock-actions .btn-secondary {
+  background: linear-gradient(135deg, #1fa77d, #12815f);
+  color: #fff;
+}
+
+.pin-unlock-form .link-button {
+  margin: 0 auto;
+  padding: 4px 10px;
+}
+
 .layout {
   min-height: 100vh;
   height: auto;

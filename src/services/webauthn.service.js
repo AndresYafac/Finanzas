@@ -65,7 +65,21 @@ function prepareAuthenticationOptions(options) {
 
 async function invokeWebAuthn(supabase, body) {
   const { data, error } = await supabase.functions.invoke('webauthn', { body });
-  if (error) return { data: null, error };
+  if (error) {
+    let message = error.message || 'No se pudo ejecutar WebAuthn.';
+    try {
+      const payload = typeof error.context?.json === 'function' ? await error.context.json() : null;
+      message = payload?.error || payload?.message || message;
+    } catch {
+      try {
+        const text = typeof error.context?.text === 'function' ? await error.context.text() : '';
+        if (text) message = text;
+      } catch {
+        // Keep the original Supabase error message.
+      }
+    }
+    return { data: null, error: { ...error, message } };
+  }
   if (data?.error) return { data: null, error: { message: data.error } };
   return { data: data?.data, error: null };
 }

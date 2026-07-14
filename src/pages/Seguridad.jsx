@@ -48,7 +48,7 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
     }
     const { error } = await registerPasskey(supabase);
     if (error) {
-      setPasskeyStatus(error.message);
+      setPasskeyStatus(error.message || 'No se pudo activar la biometria. Verifica que la funcion webauthn este desplegada.');
       return;
     }
     setPasskeyStatus('Biometria activada correctamente en este dispositivo.');

@@ -96,7 +96,7 @@ export function Auth({ supabase, message, setMessage }) {
           <span>Te enviaremos un enlace seguro a tu correo.</span>
         </div>
       )}
-      <form onSubmit={submit}>
+      <form className="pin-unlock-form" onSubmit={submit}>
         {mode === 'register' && (
           <div className="form-row">
             <Field label="Nombre" value={form.nombre} onChange={(value) => setField('nombre', value)} maxLength={80} />
@@ -305,13 +305,15 @@ export function PinUnlock({ supabase, profile, onUnlock, onFullLogout }) {
           pattern="\d{6}"
           placeholder="------"
         />
-        <button className="btn-full">Entrar con PIN</button>
-        {isWebAuthnSupported() && (
-          <button className="btn-full btn-secondary" type="button" onClick={unlockWithPasskey} disabled={passkeyLoading}>
-            <Fingerprint size={18} />
-            {passkeyLoading ? 'Validando biometria...' : 'Desbloquear con biometria'}
-          </button>
-        )}
+        <div className="pin-unlock-actions">
+          <button className="btn-full">Entrar con PIN</button>
+          {isWebAuthnSupported() && (
+            <button className="btn-full btn-secondary" type="button" onClick={unlockWithPasskey} disabled={passkeyLoading}>
+              <Fingerprint size={18} />
+              {passkeyLoading ? 'Validando biometria...' : 'Desbloquear con biometria'}
+            </button>
+          )}
+        </div>
         {error && <div className="auth-error">{error}</div>}
         <button type="button" className="link-button" onClick={onFullLogout}>Cerrar sesión completa</button>
       </form>
