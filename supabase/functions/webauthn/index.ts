@@ -218,6 +218,8 @@ Deno.serve(async (request) => {
         ? (body.response as { response?: { transports?: string[] } }).response?.transports || []
         : [];
 
+      await adminClient.from('webauthn_credentials').delete().eq('user_id', user.id);
+
       const { error } = await adminClient.from('webauthn_credentials').upsert({
         user_id: user.id,
         credential_id: credentialId,
@@ -251,15 +253,28 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'authentication-verify') {
-      const credentialId = String((body.response as Record<string, unknown>)?.id || '');
-      const { data: credential, error } = await adminClient
+      const credentialResponse = body.response as Record<string, unknown>;
+      const credentialId = String(credentialResponse?.id || '');
+      const credentialRawId = String(credentialResponse?.rawId || '');
+      const candidateIds = Array.from(new Set([credentialId, credentialRawId].filter(Boolean)));
+
+      if (!candidateIds.length) {
+        return jsonResponse(request, 400, { error: 'Respuesta biometrica sin identificador de credencial.' });
+      }
+
+      const { data: credentials, error } = await adminClient
         .from('webauthn_credentials')
         .select('*')
         .eq('user_id', user.id)
-        .eq('credential_id', credentialId)
-        .maybeSingle();
+        .in('credential_id', candidateIds);
 
-      if (error || !credential) return jsonResponse(request, 404, { error: 'Credencial biometrica no encontrada.' });
+      if (error) return jsonResponse(request, 500, { error: error.message });
+      const credential = credentials?.[0];
+      if (!credential) {
+        return jsonResponse(request, 404, {
+          error: 'Credencial biometrica no encontrada. Vuelve a activar biometria desde Seguridad en este mismo dispositivo.',
+        });
+      }
 
       const challenge = await getChallenge(adminClient, user.id, 'authentication');
       const verification = await verifyAuthenticationResponse({
