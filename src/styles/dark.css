@@ -472,6 +472,9 @@
 }
 
 :root[data-theme="dark"] .dashboard-option-card,
+:root[data-theme="dark"] .permission-preset-card,
+:root[data-theme="dark"] .permission-group-card,
+:root[data-theme="dark"] .permission-group-actions button,
 :root[data-theme="dark"] .permission-row-card,
 :root[data-theme="dark"] .permission-check,
 :root[data-theme="dark"] .loan-disbursement-box {
@@ -479,6 +482,17 @@
   background:
     linear-gradient(180deg, rgba(17, 31, 52, .98), rgba(10, 19, 34, .98));
   color: var(--text);
+}
+
+:root[data-theme="dark"] .permission-preset-card.danger {
+  border-color: rgba(251, 113, 133, .3);
+  background: linear-gradient(180deg, rgba(39, 18, 25, .98), rgba(10, 19, 34, .98));
+}
+
+:root[data-theme="dark"] .permission-group-actions button:hover {
+  border-color: rgba(31, 201, 151, .48);
+  background: rgba(31, 201, 151, .14);
+  color: #9ff0d3;
 }
 
 :root[data-theme="dark"] .dashboard-option-card.active,

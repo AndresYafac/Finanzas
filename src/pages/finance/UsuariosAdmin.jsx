@@ -36,6 +36,65 @@ import {
   toCsv,
 } from './financePageShared';
 
+const PERMISSION_GROUPS = [
+  { id: 'principal', label: 'Principal', modules: ['dashboard', 'clientes'] },
+  { id: 'dinero', label: 'Dinero', modules: ['cuentas', 'movimientos', 'caja-diaria', 'plantillas', 'categorias-inteligentes'] },
+  { id: 'cobros', label: 'Cobros', modules: ['deudas', 'pagos'] },
+  { id: 'por-pagar', label: 'Por pagar', modules: ['prestamos-recibidos', 'pagos-prestamos-recibidos'] },
+  { id: 'planificacion', label: 'Planificacion', modules: ['presupuestos', 'metas', 'cierre-mensual'] },
+  { id: 'analisis', label: 'Analisis', modules: ['reportes', 'backup', 'auditoria'] },
+];
+
+const PERMISSION_PRESETS = [
+  {
+    id: 'basic',
+    label: 'Basico',
+    description: 'Principal + Dinero',
+    modules: ['dashboard', 'clientes', 'cuentas', 'movimientos', 'caja-diaria', 'plantillas', 'categorias-inteligentes'],
+    mode: 'full',
+  },
+  {
+    id: 'collection',
+    label: 'Cobranza',
+    description: 'Principal + Cobros',
+    modules: ['dashboard', 'clientes', 'deudas', 'pagos'],
+    mode: 'full',
+  },
+  {
+    id: 'read',
+    label: 'Solo lectura',
+    description: 'Ver sin editar',
+    modules: MODULE_PERMISSIONS.map(([moduleId]) => moduleId),
+    mode: 'read',
+  },
+  {
+    id: 'full',
+    label: 'Usuario completo',
+    description: 'Todo operativo',
+    modules: MODULE_PERMISSIONS.map(([moduleId]) => moduleId),
+    mode: 'full',
+  },
+];
+
+function makePermissionRow(moduleId, mode = 'none') {
+  const enabled = mode === 'full';
+  return {
+    modulo: moduleId,
+    can_view: mode === 'read' || enabled,
+    can_create: enabled,
+    can_edit: enabled,
+    can_delete: enabled,
+    can_export: enabled,
+  };
+}
+
+function applyModulesPermission(current, modules, mode) {
+  return modules.reduce((map, moduleId) => ({
+    ...map,
+    [moduleId]: { ...map[moduleId], ...makePermissionRow(moduleId, mode) },
+  }), current);
+}
+
 export function UsuariosAdmin({ supabase, user }) {
   const [rows, setRows] = React.useState([]);
   const [query, setQuery] = React.useState('');
@@ -62,7 +121,7 @@ export function UsuariosAdmin({ supabase, user }) {
       apellido: row.apellido || '',
       tipo_doc: row.tipo_doc || 'DNI',
       documento: row.documento || '',
-      email_contacto: row.email_contacto || '',
+      email_contacto: row.email_contacto || row.email_auth || '',
       telefono: row.telefono || '',
       direccion: row.direccion || '',
       empresa: row.empresa || '',
@@ -96,7 +155,7 @@ export function UsuariosAdmin({ supabase, user }) {
   async function toggle(row) {
     if (row.id === user.id) return notify('No puedes modificar tu propio usuario.');
     const next = !row.activo;
-    if (!(await confirmAction(`${next ? 'Activar' : 'Desactivar'} usuario ${row.email_contacto || row.nombre || ''}?`))) return;
+    if (!(await confirmAction(`${next ? 'Activar' : 'Desactivar'} usuario ${row.email_auth || row.email_contacto || row.nombre || ''}?`))) return;
     const { error } = await updateAdminUserState(supabase, row.id, next);
     if (error) return notify(error.message);
     notify(next ? 'Usuario activado.' : 'Usuario desactivado.', 'success');
@@ -104,7 +163,7 @@ export function UsuariosAdmin({ supabase, user }) {
   }
   async function remove(row) {
     if (row.id === user.id) return notify('No puedes eliminar tu propio usuario.');
-    if (!(await confirmAction(`Eliminar definitivamente el usuario ${row.email_contacto || row.nombre || ''}? Esta accion borrara su cuenta de acceso y no se puede deshacer.`))) return;
+    if (!(await confirmAction(`Eliminar definitivamente el usuario ${row.email_auth || row.email_contacto || row.nombre || ''}? Esta accion borrara su cuenta de acceso y no se puede deshacer.`))) return;
     const { error } = await deleteAdminUser(supabase, row.id);
     if (error) return notify(error.message);
     notify('Usuario eliminado definitivamente.', 'success');
@@ -115,7 +174,7 @@ export function UsuariosAdmin({ supabase, user }) {
     setPermissionsUser(row);
     const defaults = MODULE_PERMISSIONS.reduce((map, [modulo]) => ({
       ...map,
-      [modulo]: { modulo, can_view: true, can_create: false, can_edit: false, can_delete: false, can_export: false },
+      [modulo]: { modulo, can_view: false, can_create: false, can_edit: false, can_delete: false, can_export: false },
     }), {});
     const { data, error } = await listPermissionsForUser(supabase, row.id);
     if (error) {
@@ -126,7 +185,29 @@ export function UsuariosAdmin({ supabase, user }) {
     setPermissionsOpen(true);
   }
   function setPerm(moduleId, field, checked) {
-    setPermissionRows((current) => ({ ...current, [moduleId]: { ...current[moduleId], [field]: checked } }));
+    setPermissionRows((current) => {
+      const next = { ...current[moduleId], modulo: moduleId, [field]: checked };
+      if (field !== 'can_view' && checked) next.can_view = true;
+      if (field === 'can_view' && !checked) {
+        next.can_create = false;
+        next.can_edit = false;
+        next.can_delete = false;
+        next.can_export = false;
+      }
+      return { ...current, [moduleId]: next };
+    });
+  }
+  function applyPreset(preset) {
+    setPermissionRows((current) => {
+      const reset = MODULE_PERMISSIONS.reduce((map, [moduleId]) => ({ ...map, [moduleId]: makePermissionRow(moduleId, 'none') }), {});
+      return applyModulesPermission({ ...reset, ...current, ...reset }, preset.modules, preset.mode);
+    });
+  }
+  function applyGroup(group, mode) {
+    setPermissionRows((current) => applyModulesPermission(current, group.modules, mode));
+  }
+  function visibleCount(group) {
+    return group.modules.filter((moduleId) => permissionRows[moduleId]?.can_view).length;
   }
   async function savePermissionRows(event) {
     event.preventDefault();
@@ -147,17 +228,18 @@ export function UsuariosAdmin({ supabase, user }) {
     notify('Permisos actualizados.', 'success');
     setPermissionsOpen(false);
   }
-  const filtered = rows.filter((row) => `${row.nombre || ''} ${row.apellido || ''} ${row.email_contacto || ''} ${row.role || ''}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = rows.filter((row) => `${row.nombre || ''} ${row.apellido || ''} ${row.email_auth || ''} ${row.email_contacto || ''} ${row.role || ''}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <>
       <TableSection
         title="Usuarios"
         search={query}
         setSearch={setQuery}
-        columns={['Usuario', 'Contacto', 'Rol', 'Estado', 'Registro']}
+        columns={['Usuario', 'Correo acceso', 'Contacto', 'Rol', 'Estado', 'Registro']}
         rows={filtered.map((row) => [
           `${row.nombre || '-'} ${row.apellido || ''}`,
-          row.email_contacto || row.telefono || '-',
+          row.email_auth || row.email_contacto || '-',
+          row.email_contacto && row.email_contacto !== row.email_auth ? row.email_contacto : row.telefono || '-',
           row.role || 'user',
           row.deleted_at ? <Badge tone="red">Eliminado</Badge> : <Badge tone={row.activo ? 'green' : 'yellow'}>{row.activo ? 'Activo' : 'Inactivo'}</Badge>,
           row.created_at ? new Date(row.created_at).toLocaleDateString('es-PE') : '-',
@@ -196,6 +278,49 @@ export function UsuariosAdmin({ supabase, user }) {
                 <p>Define qué puede ver y qué acciones puede realizar este usuario.</p>
               </div>
               <span>{Object.values(permissionRows).reduce((sum, row) => sum + PERMISSION_FIELDS.filter(([field]) => row[field]).length, 0)} permisos activos</span>
+            </div>
+            <div className="permission-presets">
+              <div className="permission-block-title">
+                <strong>Plantillas rapidas</strong>
+                <small>Aplican una configuracion completa en un clic.</small>
+              </div>
+              <div className="permission-preset-grid">
+                {PERMISSION_PRESETS.map((preset) => (
+                  <button type="button" className="permission-preset-card" key={preset.id} onClick={() => applyPreset(preset)}>
+                    <strong>{preset.label}</strong>
+                    <span>{preset.description}</span>
+                  </button>
+                ))}
+                <button type="button" className="permission-preset-card danger" onClick={() => setPermissionRows(MODULE_PERMISSIONS.reduce((map, [moduleId]) => ({ ...map, [moduleId]: makePermissionRow(moduleId, 'none') }), {}))}>
+                  <strong>Sin acceso</strong>
+                  <span>Apaga todos los modulos.</span>
+                </button>
+              </div>
+            </div>
+            <div className="permission-groups">
+              <div className="permission-block-title">
+                <strong>Accesos por grupo</strong>
+                <small>Activa secciones completas sin marcar modulo por modulo.</small>
+              </div>
+              <div className="permission-group-grid">
+                {PERMISSION_GROUPS.map((group) => (
+                  <div className="permission-group-card" key={group.id}>
+                    <div>
+                      <strong>{group.label}</strong>
+                      <span>{visibleCount(group)}/{group.modules.length} modulos visibles</span>
+                    </div>
+                    <div className="permission-group-actions">
+                      <button type="button" onClick={() => applyGroup(group, 'read')}>Solo ver</button>
+                      <button type="button" onClick={() => applyGroup(group, 'full')}>Operar</button>
+                      <button type="button" onClick={() => applyGroup(group, 'none')}>Quitar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="permission-block-title">
+              <strong>Detalle por modulo</strong>
+              <small>Ajusta permisos puntuales solo cuando sea necesario.</small>
             </div>
             <div className="permissions-list">
             {MODULE_PERMISSIONS.map(([moduleId, label]) => {

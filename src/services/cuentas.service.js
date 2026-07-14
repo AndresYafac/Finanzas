@@ -50,3 +50,15 @@ export function listarCuentasActivas(supabase, adminId) {
     .eq('admin_id', adminId)
     .order('banco', { ascending: true });
 }
+
+export function isLinkedWallet(cuenta) {
+  return cuenta?.tipo_entidad === 'billetera' && Boolean(cuenta.cuenta_vinculada_id);
+}
+
+export function getOperationalAccounts(cuentas = []) {
+  return cuentas.filter((cuenta) => !isLinkedWallet(cuenta));
+}
+
+export function sumOperationalBalances(cuentas = []) {
+  return getOperationalAccounts(cuentas).reduce((sum, cuenta) => sum + Number(cuenta.saldo || 0), 0);
+}

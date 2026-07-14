@@ -600,6 +600,25 @@
     flex-direction: column;
   }
 
+  .permission-block-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .permission-preset-grid,
+  .permission-group-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .permission-preset-card {
+    min-height: auto;
+  }
+
+  .permission-group-actions {
+    grid-template-columns: 1fr;
+  }
+
   .permission-row-card {
     grid-template-columns: 1fr;
     padding: 12px;

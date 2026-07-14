@@ -9,6 +9,9 @@ import {
   LayoutDashboard,
   Bell,
   Palette,
+  CalendarCheck,
+  ClipboardPlus,
+  Tags,
   Search,
   ShieldCheck,
   Settings,
@@ -30,10 +33,9 @@ import { usePermissions } from './hooks/usePermissions';
 import { useVisualConfig } from './hooks/useVisualConfig';
 import { clearFeedbackHandlers, confirmAction, hideBusy, notify, setFeedbackHandlers, showBusy } from './services/feedback';
 import { getProfile } from './services/admin.service';
-import { getAlertData } from './services/dashboard.service';
+import { listInternalNotifications, syncAutomaticNotifications } from './services/notificationsCenter.service';
 import { globalSearch } from './services/search.service';
 import { storage } from './services/storage.service';
-import { calcEstado, money, month, today } from './utils/format';
 import { isMobileViewport } from './utils/security';
 
 const lazyPage = (loader, exportName) => React.lazy(() => loader().then((module) => ({ default: module[exportName] })));
@@ -43,6 +45,10 @@ const Perfil = lazyPage(() => import('./pages/Perfil'), 'Perfil');
 const Seguridad = lazyPage(() => import('./pages/Seguridad'), 'Seguridad');
 const Notificaciones = lazyPage(() => import('./pages/Notificaciones'), 'Notificaciones');
 const Apariencia = lazyPage(() => import('./pages/Apariencia'), 'Apariencia');
+const CierreMensual = lazyPage(() => import('./pages/finance/CierreMensual'), 'CierreMensual');
+const CajaDiaria = lazyPage(() => import('./pages/finance/CajaDiaria'), 'CajaDiaria');
+const Plantillas = lazyPage(() => import('./pages/finance/Plantillas'), 'Plantillas');
+const CategoriasInteligentes = lazyPage(() => import('./pages/finance/CategoriasInteligentes'), 'CategoriasInteligentes');
 const Clientes = lazyPage(() => import('./pages/finance/Clientes'), 'Clientes');
 const Cuentas = lazyPage(() => import('./pages/finance/Cuentas'), 'Cuentas');
 const Deudas = lazyPage(() => import('./pages/finance/Deudas'), 'Deudas');
@@ -71,6 +77,10 @@ const PAGE_IDS = [
   'movimientos',
   'presupuestos',
   'metas',
+  'cierre-mensual',
+  'caja-diaria',
+  'plantillas',
+  'categorias-inteligentes',
   'reportes',
   'backup',
   'auditoria',
@@ -263,6 +273,9 @@ export function App() {
     ['dinero', [
       ['cuentas', 'Cuentas y caja', Building2, can('cuentas')],
       ['movimientos', 'Movimientos de caja', Wallet, can('movimientos')],
+      ['caja-diaria', 'Caja diaria', CalendarCheck, can('movimientos')],
+      ['plantillas', 'Plantillas', ClipboardPlus, can('movimientos')],
+      ['categorias-inteligentes', 'Categorias inteligentes', Tags, can('movimientos')],
     ]],
     ['cobros', [
       ['deudas', 'Cuentas por cobrar', CreditCard, can('deudas')],
@@ -275,6 +288,7 @@ export function App() {
     ['planificacion', [
       ['presupuestos', 'Presupuestos', ClipboardList, can('presupuestos')],
       ['metas', 'Metas', Target, can('metas')],
+      ['cierre-mensual', 'Cierre mensual', CalendarCheck, can('reportes')],
     ]],
     ['analisis', [
       ['reportes', 'Reportes', BarChart3, can('reportes')],
@@ -329,8 +343,12 @@ export function App() {
         {page === 'pagos-prestamos-recibidos' && <PagosPrestamosRecibidos supabase={supabase} user={session.user} can={(action) => can('pagos-prestamos-recibidos', action)} />}
         {page === 'pagos' && <Pagos supabase={supabase} user={session.user} isAdmin={isAdmin} can={(action) => can('pagos', action)} />}
         {page === 'movimientos' && <Movimientos supabase={supabase} user={session.user} isAdmin={isAdmin} can={(action) => can('movimientos', action)} />}
+        {page === 'caja-diaria' && <CajaDiaria supabase={supabase} user={session.user} can={(action) => can('movimientos', action)} />}
+        {page === 'plantillas' && <Plantillas supabase={supabase} user={session.user} can={(action) => can('movimientos', action)} />}
+        {page === 'categorias-inteligentes' && <CategoriasInteligentes supabase={supabase} user={session.user} can={(action) => can('movimientos', action)} />}
         {page === 'presupuestos' && <Presupuestos supabase={supabase} user={session.user} can={(action) => can('presupuestos', action)} />}
         {page === 'metas' && <Metas supabase={supabase} user={session.user} can={(action) => can('metas', action)} />}
+        {page === 'cierre-mensual' && <CierreMensual supabase={supabase} user={session.user} can={(action) => can('reportes', action)} />}
         {page === 'reportes' && <Reportes supabase={supabase} user={session.user} can={(action) => can('reportes', action)} />}
         {page === 'backup' && <Backup supabase={supabase} user={session.user} can={(action) => can('backup', action)} />}
         {page === 'auditoria' && <Auditoria supabase={supabase} user={session.user} can={(action) => can('auditoria', action)} />}
@@ -402,8 +420,12 @@ function pageTitle(page, isAdmin) {
     'pagos-prestamos-recibidos': ['Pagos a acreedores', 'Pagos realizados por prestamos que debes'],
     pagos: ['Cobros recibidos', 'Dinero recibido de clientes o deudores'],
     movimientos: ['Movimientos de caja', 'Ingresos y egresos generales'],
+    'caja-diaria': ['Caja diaria', 'Resumen y cierre operativo del dia'],
+    plantillas: ['Plantillas', 'Movimientos frecuentes reutilizables'],
+    'categorias-inteligentes': ['Categorias inteligentes', 'Reglas para sugerir categorias por concepto'],
     presupuestos: ['Presupuestos', 'Control mensual por categoria'],
     metas: ['Metas financieras', 'Objetivos de ahorro y crecimiento'],
+    'cierre-mensual': ['Cierre mensual', 'Snapshot financiero por mes'],
     reportes: ['Reportes', 'Analisis financiero'],
     backup: ['Backup', 'Exportacion de datos'],
     auditoria: ['Auditoria', 'Historial de acciones importantes'],
@@ -476,44 +498,32 @@ function GlobalSearch({ supabase, user, onOpenPage }) {
 function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
   const [alerts, setAlerts] = React.useState([]);
   React.useEffect(() => {
+    let mounted = true;
     async function load() {
-      const alertData = await getAlertData(supabase, user.id);
-      const debtAlerts = alertData.deudas
-        .filter((d) => calcEstado(d) === 'vencido' || calcEstado(d) === 'por_vencer')
-        .slice(0, 5)
-        .map((d) => ({ page: 'deudas', level: calcEstado(d) === 'vencido' ? 'danger' : 'warning', title: calcEstado(d) === 'vencido' ? 'Cuenta por cobrar vencida' : 'Cuenta por cobrar por vencer', text: `${d.descripcion || 'Sin descripcion'} - ${money(Number(d.monto_total || 0) - Number(d.monto_pagado || 0))}` }));
-      const budgetAlerts = alertData.presupuestos.map((p) => {
-        const used = alertData.movimientos
-          .filter((m) => m.tipo === p.tipo && ((p.tipo_movimiento_id && m.tipo_movimiento_id === p.tipo_movimiento_id) || (!p.tipo_movimiento_id && (m.categoria || '') === (p.categoria || ''))))
-          .reduce((sum, m) => sum + Number(m.monto || 0), 0);
-        const limit = Number(p.monto_limite || 0);
-        return { p, used, limit, pct: limit ? Math.round((used / limit) * 100) : 0 };
-      }).filter((item) => item.limit && item.pct >= 80).slice(0, 4).map((item) => ({
-        page: 'presupuestos',
-        level: item.pct >= 100 ? 'danger' : 'warning',
-        title: item.pct >= 100 ? 'Presupuesto superado' : 'Presupuesto en alerta',
-        text: `${item.p.tipos_movimiento?.nombre || item.p.categoria || item.p.tipo}: ${item.pct}%`,
-      }));
-      const goalAlerts = alertData.metas
-        .filter((m) => m.fecha_objetivo && m.fecha_objetivo <= today())
-        .slice(0, 3)
-        .map((m) => ({ page: 'metas', level: 'warning', title: 'Meta por revisar', text: `${m.nombre}: ${money(m.monto_actual)} / ${money(m.monto_objetivo)}` }));
-      const cuentasById = new Map(alertData.cuentas.map((cuenta) => [cuenta.id, cuenta]));
-      const lowBalanceAlerts = alertData.cuentas
-        .filter((c) => {
-          const isLinkedWallet = c.tipo_entidad === 'billetera' && c.cuenta_vinculada_id && cuentasById.has(c.cuenta_vinculada_id);
-          if (isLinkedWallet) return false;
-          return Number(c.saldo || 0) <= 0;
-        })
-        .slice(0, 3)
-        .map((c) => ({ page: 'cuentas', level: 'warning', title: 'Saldo bajo', text: `${c.banco || 'Cuenta'} ${c.tipo || ''}: ${money(c.saldo || 0)}` }));
-      const receivedLoanAlerts = alertData.prestamosRecibidos
-        .filter((p) => p.fecha_vencimiento && (calcEstado({ fecha_vencimiento: p.fecha_vencimiento, monto_total: p.saldo_inicial || p.monto_original, monto_pagado: p.monto_pagado }) !== 'al_dia'))
-        .slice(0, 4)
-        .map((p) => ({ page: 'prestamos-recibidos', level: 'warning', title: 'Prestamo por pagar', text: `${p.acreedor || p.descripcion || 'Acreedor'}: ${money(Number(p.saldo_inicial || p.monto_original || 0) - Number(p.monto_pagado || 0))}` }));
-      setAlerts([...debtAlerts, ...budgetAlerts, ...goalAlerts, ...lowBalanceAlerts, ...receivedLoanAlerts]);
+      await syncAutomaticNotifications(supabase, user.id);
+      const { data, error } = await listInternalNotifications(supabase, user.id);
+      if (!mounted) return;
+      if (error) {
+        setAlerts([]);
+        return;
+      }
+      setAlerts((data || []).filter((alert) => !alert.leida));
     }
     load();
+    const interval = window.setInterval(load, 10 * 60 * 1000);
+    const channel = supabase
+      .channel(`app-notifications-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_notifications', filter: `admin_id=eq.${user.id}` },
+        load,
+      )
+      .subscribe();
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [supabase, user.id]);
   return (
     <div className="alerts-menu">
@@ -525,9 +535,9 @@ function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
         <div className="alerts-panel">
           <h4>Alertas</h4>
           {alerts.length ? alerts.map((alert, index) => (
-            <button key={`${alert.title}-${index}`} type="button" onClick={() => { onOpenPage(alert.page); setOpen(false); }}>
-              <b className={alert.level === 'danger' ? 'danger-text' : ''}>{alert.title}</b>
-              <small>{alert.text}</small>
+            <button key={alert.id || `${alert.titulo}-${index}`} type="button" onClick={() => { onOpenPage(alert.modulo || 'notificaciones'); setOpen(false); }}>
+              <b className={alert.tipo === 'danger' ? 'danger-text' : ''}>{alert.titulo}</b>
+              <small>{alert.mensaje}</small>
             </button>
           )) : <div className="global-search-empty">Sin alertas por ahora</div>}
         </div>

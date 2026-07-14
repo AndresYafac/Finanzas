@@ -1,7 +1,13 @@
 import React from 'react';
-import { Bell, Check, Power, Send, Smartphone } from 'lucide-react';
-import { Button, Card, FormActions, SelectField } from '../components/ui';
+import { Bell, Check, Power, RefreshCw, Send, Smartphone, Trash2 } from 'lucide-react';
+import { Badge, Button, Card, FormActions, SelectField } from '../components/ui';
 import { notify } from '../services/feedback';
+import {
+  deleteNotification,
+  listInternalNotifications,
+  markNotificationRead,
+  syncAutomaticNotifications,
+} from '../services/notificationsCenter.service';
 import {
   disablePushDevice,
   getNotificationPermission,
@@ -25,18 +31,22 @@ const ALERT_OPTIONS = [
 export function Notificaciones({ supabase, user }) {
   const [preferences, setPreferences] = React.useState(null);
   const [devices, setDevices] = React.useState([]);
+  const [internalNotifications, setInternalNotifications] = React.useState([]);
   const [status, setStatus] = React.useState('');
   const supported = isPushSupported();
   const permission = getNotificationPermission();
   const hasVapidKey = !!getVapidPublicKey();
 
   async function load() {
-    const [preferencesResult, devicesResult] = await Promise.all([
+    await syncAutomaticNotifications(supabase, user.id);
+    const [preferencesResult, devicesResult, internalResult] = await Promise.all([
       getPushPreferences(supabase, user.id),
       listPushDevices(supabase, user.id),
+      listInternalNotifications(supabase, user.id),
     ]);
     setPreferences(preferencesResult.data);
     setDevices(devicesResult.data || []);
+    setInternalNotifications(internalResult.data || []);
   }
 
   React.useEffect(() => {
@@ -88,15 +98,78 @@ export function Notificaciones({ supabase, user }) {
     notify('Notificacion de prueba enviada.', 'success');
   }
 
+  async function generateAlerts() {
+    setStatus('Actualizando alertas internas...');
+    const { data, error } = await syncAutomaticNotifications(supabase, user.id, { force: true });
+    if (error) {
+      setStatus(error.message);
+      notify(error.message, 'error');
+      return;
+    }
+    setStatus(`${data.length} alerta(s) nueva(s).`);
+    notify('Alertas internas actualizadas.', 'success');
+    await load();
+  }
+
+  async function toggleRead(item) {
+    const { error } = await markNotificationRead(supabase, item.id, !item.leida);
+    if (error) {
+      notify(error.message, 'error');
+      return;
+    }
+    await load();
+  }
+
+  async function removeInternal(item) {
+    const { error } = await deleteNotification(supabase, item.id);
+    if (error) {
+      notify(error.message, 'error');
+      return;
+    }
+    notify('Alerta eliminada.', 'success');
+    await load();
+  }
+
   return (
     <div className="notifications-page">
+      <Card title="Centro de alertas internas" className="notifications-card">
+        <div className="card-body notifications-layout">
+          <section className="notification-hero">
+            <div className="notification-icon"><Bell size={26} /></div>
+            <div>
+              <h4>Alertas del sistema</h4>
+              <p>Las alertas se actualizan automaticamente al ingresar al sistema y mientras usas la app.</p>
+            </div>
+          </section>
+          <FormActions>
+            <Button variant="primary" onClick={generateAlerts}><RefreshCw size={16} />Actualizar alertas</Button>
+            <Button onClick={load}>Actualizar</Button>
+          </FormActions>
+          <div className="notification-internal-list">
+            {internalNotifications.length ? internalNotifications.map((item) => (
+              <div className={`notification-internal-item ${item.leida ? 'read' : ''}`} key={item.id}>
+                <div>
+                  <Badge tone={item.tipo === 'danger' ? 'red' : item.tipo === 'warning' ? 'yellow' : 'gray'}>{item.tipo}</Badge>
+                  <strong>{item.titulo}</strong>
+                  <p>{item.mensaje}</p>
+                  <span>{new Date(item.created_at).toLocaleString('es-PE')}</span>
+                </div>
+                <div className="row-actions">
+                  <Button size="sm" onClick={() => toggleRead(item)}>{item.leida ? 'No leida' : 'Leida'}</Button>
+                  <Button size="sm" iconOnly variant="danger" onClick={() => removeInternal(item)}><Trash2 size={14} /></Button>
+                </div>
+              </div>
+            )) : <p className="muted">Sin alertas internas registradas.</p>}
+          </div>
+        </div>
+      </Card>
       <Card title="Notificaciones push" className="notifications-card">
         <div className="card-body notifications-layout">
           <section className="notification-hero">
             <div className="notification-icon"><Bell size={26} /></div>
             <div>
               <h4>Alertas en tu celular</h4>
-              <p>Activa avisos reales del navegador para recibir alertas incluso cuando la app este cerrada.</p>
+              <p>Activa avisos reales del navegador. Para recibirlos con la app cerrada se necesita la tarea programada de Supabase.</p>
             </div>
           </section>
 
@@ -142,7 +215,7 @@ export function Notificaciones({ supabase, user }) {
                   </label>
                 ))}
               </div>
-              <p className="muted">La hora se usara cuando activemos el proceso automatico programado de alertas. Por ahora queda guardada como preferencia.</p>
+              <p className="muted">La hora se usara para el proceso automatico programado de alertas.</p>
               <SelectField label="Hora para futuros recordatorios automaticos" value={String(preferences.reminder_hour)} onChange={(value) => updatePreference('reminder_hour', Number(value))}>
                 {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}
               </SelectField>

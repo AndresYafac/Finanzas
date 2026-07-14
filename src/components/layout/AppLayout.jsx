@@ -26,16 +26,21 @@ export function Sidebar({ pages, page, profile, user, isAdmin, sidebarOpen, onOp
         </div>
       </div>
       <nav className="sidebar-nav">
-        {pages.map(([section, items]) => (
-          <React.Fragment key={section}>
-            <div className="nav-section-label">{section}</div>
-            {items.filter(([, , , visible]) => visible).map(([id, label, Icon]) => (
-              <button key={id} className={`nav-item ${page === id ? 'active' : ''}`} onClick={() => onOpenPage(id)}>
-                <Icon size={18} /> {label}
-              </button>
-            ))}
-          </React.Fragment>
-        ))}
+        {pages.map(([section, items]) => {
+          const visibleItems = items.filter(([, , , visible]) => visible);
+          if (!visibleItems.length) return null;
+
+          return (
+            <React.Fragment key={section}>
+              <div className="nav-section-label">{section}</div>
+              {visibleItems.map(([id, label, Icon]) => (
+                <button key={id} className={`nav-item ${page === id ? 'active' : ''}`} onClick={() => onOpenPage(id)}>
+                  <Icon size={18} /> {label}
+                </button>
+              ))}
+            </React.Fragment>
+          );
+        })}
         <button className="nav-item logout" onClick={onLogout}><LogOut size={18} /> Cerrar sesión</button>
       </nav>
       <div className="sidebar-footer">

@@ -13,6 +13,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Badge, Field, Modal, RowActions, SelectField, TableSection } from '../../components/ui';
+import { AttachmentManager } from '../../components/AttachmentManager';
 import { confirmAction, notify } from '../../services/feedback';
 import {
   actualizarMovimiento,
@@ -23,6 +24,7 @@ import {
   listMovimientosViewData,
   registrarMovimiento,
 } from '../../services/movimientos.service';
+import { listCategoryRules, suggestCategoryFromRules } from '../../services/smartCategories.service';
 import { calcEstado, dateFmt, money, month, today } from '../../utils/format';
 import {
   MODULE_PERMISSIONS,
@@ -41,26 +43,35 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
   const [movimientos, setMovimientos] = React.useState([]);
   const [tipos, setTipos] = React.useState([]);
   const [cuentas, setCuentas] = React.useState([]);
+  const [categoryRules, setCategoryRules] = React.useState([]);
   const [tipoForm, setTipoForm] = React.useState({ tipo: 'ingreso', nombre: '' });
   const [tipoEditingId, setTipoEditingId] = React.useState(null);
   const [tiposOpen, setTiposOpen] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState(null);
   const [form, setForm] = React.useState({ tipo: 'ingreso', concepto: '', tipo_movimiento_id: '', cuenta_id: '', monto: '', fecha: today() });
+  const [categorySuggestion, setCategorySuggestion] = React.useState(null);
   const load = React.useCallback(async () => {
-    const [{ data }, { data: tiposData }, { data: cuentasData }] = await listMovimientosViewData(supabase, user.id);
+    const [viewData, rulesResult] = await Promise.all([
+      listMovimientosViewData(supabase, user.id),
+      listCategoryRules(supabase, user.id),
+    ]);
+    const [{ data }, { data: tiposData }, { data: cuentasData }] = viewData;
     setMovimientos(data || []);
     setTipos(tiposData || []);
     setCuentas(cuentasData || []);
+    setCategoryRules(rulesResult.data || []);
   }, [supabase, user.id, isAdmin]);
   React.useEffect(() => { load(); }, [load]);
   function openCreate() {
     setEditingId(null);
+    setCategorySuggestion(null);
     setForm({ tipo: 'ingreso', concepto: '', tipo_movimiento_id: '', cuenta_id: '', monto: '', fecha: today() });
     setOpen(true);
   }
   function openEdit(movimiento) {
     setEditingId(movimiento.id);
+    setCategorySuggestion(null);
     setForm({
       tipo: movimiento.tipo || 'ingreso',
       concepto: movimiento.concepto || '',
@@ -70,6 +81,21 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
       fecha: movimiento.fecha || today(),
     });
     setOpen(true);
+  }
+  function updateConcepto(value) {
+    const rule = suggestCategoryFromRules(value, categoryRules);
+    if (!rule) {
+      setCategorySuggestion(null);
+      setForm({ ...form, concepto: value });
+      return;
+    }
+    setCategorySuggestion(rule);
+    setForm({
+      ...form,
+      concepto: value,
+      tipo: rule.tipo || form.tipo,
+      tipo_movimiento_id: rule.tipo_movimiento_id || form.tipo_movimiento_id,
+    });
   }
   async function remove(movimiento) {
     if (!can('delete')) return notify('No tienes permiso para eliminar.');
@@ -179,11 +205,25 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
                 return <option key={c.id} value={c.id}>{c.banco} - {c.tipo}{linkedLabel} - {money(getSaldoOperativo(c))}</option>;
               })}
             </SelectField>
-            <Field label="Concepto" value={form.concepto} onChange={(v) => setForm({ ...form, concepto: v })} required />
+            <Field label="Concepto" value={form.concepto} onChange={updateConcepto} required />
+            {categorySuggestion && (
+              <div className="connection-status success">
+                Categoria sugerida por regla: {categorySuggestion.categoria || categorySuggestion.tipos_movimiento?.nombre || 'Sin categoria'}.
+              </div>
+            )}
             <div className="form-row">
               <Field label="Monto" type="number" value={form.monto} onChange={(v) => setForm({ ...form, monto: v })} required />
               <Field label="Fecha" type="date" value={form.fecha} onChange={(v) => setForm({ ...form, fecha: v })} />
             </div>
+            {editingId && (
+              <AttachmentManager
+                supabase={supabase}
+                adminId={user.id}
+                userId={user.id}
+                module="movimientos"
+                recordId={editingId}
+              />
+            )}
           </div>
           <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />{editingId ? 'Actualizar' : 'Guardar'}</button></div>
         </form>
