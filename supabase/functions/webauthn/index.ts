@@ -187,8 +187,9 @@ Deno.serve(async (request) => {
           type: 'public-key',
         })),
         authenticatorSelection: {
-          residentKey: 'preferred',
-          userVerification: 'preferred',
+          residentKey: 'required',
+          requireResidentKey: true,
+          userVerification: 'required',
         },
       });
 
@@ -242,12 +243,7 @@ Deno.serve(async (request) => {
 
       const options = await generateAuthenticationOptions({
         rpID,
-        userVerification: 'preferred',
-        allowCredentials: credentials.map((credential) => ({
-          id: String(credential.credential_id || ''),
-          type: 'public-key',
-          transports: credential.transports || undefined,
-        })),
+        userVerification: 'required',
       });
 
       await saveChallenge(adminClient, user.id, 'authentication', options.challenge);

@@ -184,6 +184,15 @@ export async function authenticateWithPasskey(supabase) {
       response: serializeCredential(credential),
     });
   } catch (error) {
-    return { error: { message: error?.message || 'Validacion biometrica cancelada.' } };
+    const message = String(error?.message || '');
+    if (/no hay llaves|no credentials|notallowed|not allowed|not found|cancel/i.test(message)) {
+      return {
+        error: {
+          code: 'PASSKEY_NOT_FOUND',
+          message: 'No hay una llave de acceso para este dispositivo. Activa la biometria nuevamente desde Seguridad en este mismo celular.',
+        },
+      };
+    }
+    return { error: { message: message || 'Validacion biometrica cancelada.' } };
   }
 }
