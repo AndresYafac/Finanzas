@@ -243,6 +243,10 @@ export function PinUnlock({ supabase, profile, onUnlock, onFullLogout }) {
     try {
       const { error: passkeyError } = await authenticateWithPasskey(supabase);
       if (passkeyError) {
+        if (passkeyError.code === 'SESSION_REQUIRED' || passkeyError.code === 'SESSION_EXPIRED') {
+          setError('La sesion recordada vencio. Cierra sesion completa e ingresa otra vez con correo y contrasena.');
+          return;
+        }
         setError(passkeyError.message || 'No se pudo validar la biometria.');
         return;
       }

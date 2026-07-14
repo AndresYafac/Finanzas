@@ -48,6 +48,10 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
     }
     const { error } = await registerPasskey(supabase);
     if (error) {
+      if (error.code === 'SESSION_REQUIRED' || error.code === 'SESSION_EXPIRED') {
+        setPasskeyStatus('Tu sesion vencio. Cierra sesion e ingresa nuevamente antes de activar biometria.');
+        return;
+      }
       setPasskeyStatus(error.message || 'No se pudo activar la biometria. Verifica que la funcion webauthn este desplegada.');
       return;
     }

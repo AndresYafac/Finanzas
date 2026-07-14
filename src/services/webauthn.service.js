@@ -64,6 +64,33 @@ function prepareAuthenticationOptions(options) {
 }
 
 async function invokeWebAuthn(supabase, body) {
+  const sessionResult = await supabase.auth.getSession();
+  let currentSession = sessionResult.data?.session || null;
+  if (!currentSession) {
+    return {
+      data: null,
+      error: {
+        code: 'SESSION_REQUIRED',
+        message: 'Tu sesion ya no esta activa. Inicia sesion nuevamente con correo y contrasena.',
+      },
+    };
+  }
+
+  const expiresAt = Number(currentSession.expires_at || 0) * 1000;
+  if (expiresAt && expiresAt - Date.now() < 60_000) {
+    const refreshResult = await supabase.auth.refreshSession();
+    currentSession = refreshResult.data?.session || null;
+    if (refreshResult.error || !currentSession) {
+      return {
+        data: null,
+        error: {
+          code: 'SESSION_EXPIRED',
+          message: 'Tu sesion recordada vencio. Ingresa nuevamente con correo y contrasena.',
+        },
+      };
+    }
+  }
+
   const { data, error } = await supabase.functions.invoke('webauthn', { body });
   if (error) {
     let message = error.message || 'No se pudo ejecutar WebAuthn.';
@@ -77,6 +104,17 @@ async function invokeWebAuthn(supabase, body) {
       } catch {
         // Keep the original Supabase error message.
       }
+    }
+    if (/sesion no valida|session.*invalid|jwt|unauthorized/i.test(message)) {
+      const refreshResult = await supabase.auth.refreshSession();
+      if (refreshResult.data?.session && !refreshResult.error) {
+        const retry = await supabase.functions.invoke('webauthn', { body });
+        if (!retry.error) {
+          if (retry.data?.error) return { data: null, error: { message: retry.data.error } };
+          return { data: retry.data?.data, error: null };
+        }
+      }
+      message = 'Tu sesion recordada vencio. Ingresa nuevamente con correo y contrasena.';
     }
     return { data: null, error: { ...error, message } };
   }
