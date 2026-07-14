@@ -1,9 +1,8 @@
 import React from 'react';
-import { Check, Eye, EyeOff, Fingerprint, LogOut } from 'lucide-react';
+import { Check, Eye, EyeOff, LogOut } from 'lucide-react';
 import { clearRememberedAccount } from '../controllers/auth.controller';
 import { updateMobilePin } from '../controllers/profile.controller';
 import { confirmAction } from '../services/feedback';
-import { isWebAuthnSupported, registerPasskey } from '../services/webauthn.service';
 import { getPasswordStrength, validatePassword } from '../utils/password';
 import { Button, Card, Field, FormActions } from '../components/ui';
 
@@ -11,7 +10,6 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
   const [pin, setPin] = React.useState('');
   const [confirmPin, setConfirmPin] = React.useState('');
   const [pinStatus, setPinStatus] = React.useState('');
-  const [passkeyStatus, setPasskeyStatus] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
   const [passwordStatus, setPasswordStatus] = React.useState('');
@@ -38,24 +36,6 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
     setConfirmPin('');
     setPinStatus('PIN movil actualizado correctamente.');
     onSaved?.();
-  }
-
-  async function activatePasskey() {
-    setPasskeyStatus('');
-    if (!isWebAuthnSupported()) {
-      setPasskeyStatus('Este navegador no soporta biometria o no estas usando HTTPS.');
-      return;
-    }
-    const { error } = await registerPasskey(supabase);
-    if (error) {
-      if (error.code === 'SESSION_REQUIRED' || error.code === 'SESSION_EXPIRED') {
-        setPasskeyStatus('Tu sesion vencio. Cierra sesion e ingresa nuevamente antes de activar biometria.');
-        return;
-      }
-      setPasskeyStatus(error.message || 'No se pudo activar la biometria. Verifica que la funcion webauthn este desplegada.');
-      return;
-    }
-    setPasskeyStatus('Biometria activada correctamente en este dispositivo.');
   }
 
   async function savePassword(event) {
@@ -105,17 +85,6 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
               <Button variant="primary" type="submit"><Check size={16} />Cambiar PIN</Button>
             </FormActions>
           </form>
-
-          <div className="security-form">
-            <div className="security-block-head">
-              <h4>Biometria / Passkey</h4>
-              <p className="muted">Activa huella, Face ID o bloqueo del dispositivo para desbloquear esta cuenta. FinTrack no guarda tu huella.</p>
-            </div>
-            {passkeyStatus && <div className={`connection-status ${passkeyStatus.includes('correctamente') ? 'success' : ''}`}>{passkeyStatus}</div>}
-            <FormActions>
-              <Button variant="primary" type="button" onClick={activatePasskey}><Fingerprint size={16} />Activar biometria</Button>
-            </FormActions>
-          </div>
 
           <form className="security-form security-password-form" onSubmit={savePassword}>
             <div className="security-block-head">

@@ -1,9 +1,8 @@
 import React from 'react';
-import { Eye, EyeOff, Fingerprint } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { REMEMBER_EMAIL_KEY, REMEMBER_KEY } from '../../constants/authStorage';
 import { friendlyAuthError, sendPasswordReset, signInWithPassword, signUpUser } from '../../controllers/auth.controller';
 import { storage } from '../../services/storage.service';
-import { authenticateWithPasskey, isWebAuthnSupported } from '../../services/webauthn.service';
 import { getPasswordStrength, validatePassword } from '../../utils/password';
 import { hashPin } from '../../utils/security';
 import { AuthCard, Field } from '../ui';
@@ -235,27 +234,6 @@ export function PinUnlock({ supabase, profile, onUnlock, onFullLogout }) {
   const [error, setError] = React.useState('');
   const [attempts, setAttempts] = React.useState(0);
   const [lockedUntil, setLockedUntil] = React.useState(() => Number(storage.getRaw('fintrack_pin_locked_until', '0') || 0));
-  const [passkeyLoading, setPasskeyLoading] = React.useState(false);
-
-  async function unlockWithPasskey() {
-    setError('');
-    setPasskeyLoading(true);
-    try {
-      const { error: passkeyError } = await authenticateWithPasskey(supabase);
-      if (passkeyError) {
-        if (passkeyError.code === 'SESSION_REQUIRED' || passkeyError.code === 'SESSION_EXPIRED') {
-          setError('La sesion recordada vencio. Cierra sesion completa e ingresa otra vez con correo y contrasena.');
-          return;
-        }
-        setError(passkeyError.message || 'No se pudo validar la biometria.');
-        return;
-      }
-      storage.remove('fintrack_pin_locked_until');
-      onUnlock();
-    } finally {
-      setPasskeyLoading(false);
-    }
-  }
 
   async function submit(event) {
     event.preventDefault();
@@ -311,12 +289,6 @@ export function PinUnlock({ supabase, profile, onUnlock, onFullLogout }) {
         />
         <div className="pin-unlock-actions">
           <button className="btn-full">Entrar con PIN</button>
-          {isWebAuthnSupported() && (
-            <button className="btn-full btn-secondary" type="button" onClick={unlockWithPasskey} disabled={passkeyLoading}>
-              <Fingerprint size={18} />
-              {passkeyLoading ? 'Validando biometria...' : 'Desbloquear con biometria'}
-            </button>
-          )}
         </div>
         {error && <div className="auth-error">{error}</div>}
         <button type="button" className="link-button" onClick={onFullLogout}>Cerrar sesión completa</button>
