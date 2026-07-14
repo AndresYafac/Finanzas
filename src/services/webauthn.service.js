@@ -2,8 +2,23 @@ function browserSupportsWebAuthn() {
   return typeof window !== 'undefined' && !!window.PublicKeyCredential && !!navigator.credentials;
 }
 
+function bytesLikeToBuffer(value) {
+  if (value instanceof ArrayBuffer) return value;
+  if (ArrayBuffer.isView(value)) return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+  if (Array.isArray(value)) return new Uint8Array(value).buffer;
+  if (value && typeof value === 'object') {
+    const numericKeys = Object.keys(value).filter((key) => /^\d+$/.test(key)).sort((a, b) => Number(a) - Number(b));
+    if (numericKeys.length) return new Uint8Array(numericKeys.map((key) => Number(value[key]))).buffer;
+  }
+  return null;
+}
+
 function base64UrlToBuffer(value) {
-  const base64 = String(value || '').replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(String(value || '').length / 4) * 4, '=');
+  const bytesBuffer = bytesLikeToBuffer(value);
+  if (bytesBuffer) return bytesBuffer;
+
+  const text = String(value || '');
+  const base64 = text.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(text.length / 4) * 4, '=');
   const binary = window.atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);

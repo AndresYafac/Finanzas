@@ -59,8 +59,20 @@ function bufferToBase64Url(buffer: Uint8Array | ArrayBuffer) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function base64UrlToUint8Array(value: string) {
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+function base64UrlToUint8Array(value: unknown) {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (Array.isArray(value)) return Uint8Array.from(value.map((item) => Number(item)));
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const numericKeys = Object.keys(record)
+      .filter((key) => /^\d+$/.test(key))
+      .sort((a, b) => Number(a) - Number(b));
+    if (numericKeys.length) return Uint8Array.from(numericKeys.map((key) => Number(record[key])));
+  }
+
+  const text = String(value || '');
+  const base64 = text.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(text.length / 4) * 4, '=');
   const binary = atob(base64);
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
