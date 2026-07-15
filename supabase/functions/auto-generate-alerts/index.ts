@@ -2,6 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import webpush from 'npm:web-push@3.6.7';
 
 const MANAGED_MODULES = ['deudas', 'prestamos-recibidos', 'cuentas', 'presupuestos', 'metas'];
+const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
+const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') || '*')
   .split(',')
@@ -61,11 +63,138 @@ function isLinkedWallet(account: { tipo_entidad?: string; cuenta_vinculada_id?: 
   return account.tipo_entidad === 'billetera' && Boolean(account.cuenta_vinculada_id);
 }
 
+function base64UrlEncode(value: string | ArrayBuffer) {
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : new Uint8Array(value);
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function pemToArrayBuffer(pem: string) {
+  const base64 = pem
+    .replace('-----BEGIN PRIVATE KEY-----', '')
+    .replace('-----END PRIVATE KEY-----', '')
+    .replace(/\s/g, '');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes.buffer;
+}
+
+async function getFirebaseAccessToken(credentials: { client_email: string; private_key: string }) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64UrlEncode(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const claim = base64UrlEncode(JSON.stringify({
+    iss: credentials.client_email,
+    scope: FCM_SCOPE,
+    aud: OAUTH_TOKEN_URL,
+    iat: now,
+    exp: now + 3600,
+  }));
+  const unsignedJwt = `${header}.${claim}`;
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    pemToArrayBuffer(credentials.private_key),
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsignedJwt));
+  const jwt = `${unsignedJwt}.${base64UrlEncode(signature)}`;
+  const response = await fetch(OAUTH_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error_description || data.error || 'No se pudo autenticar con Firebase.');
+  return data.access_token as string;
+}
+
+function getFirebaseCredentials() {
+  const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
+  if (!raw) return null;
+  return JSON.parse(raw) as { project_id: string; client_email: string; private_key: string };
+}
+
+async function sendFcmSummary(adminClient: ReturnType<typeof createClient>, userId: string, count: number) {
+  const credentials = getFirebaseCredentials();
+  if (!credentials || count <= 0) return { sent: 0, skipped: 'firebase_not_configured' };
+
+  const { data: devices, error } = await adminClient
+    .from('mobile_push_devices')
+    .select('id,token')
+    .eq('user_id', userId)
+    .eq('enabled', true);
+
+  if (error) throw error;
+  if (!devices?.length) return { sent: 0 };
+
+  const accessToken = await getFirebaseAccessToken(credentials);
+  const notificationBody = count === 1 ? 'Tienes 1 alerta financiera pendiente.' : `Tienes ${count} alertas financieras pendientes.`;
+  let sent = 0;
+
+  for (const device of devices) {
+    const response = await fetch(`https://fcm.googleapis.com/v1/projects/${credentials.project_id}/messages:send`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: {
+          token: device.token,
+          notification: {
+            title: 'FinTrack Pro',
+            body: notificationBody,
+          },
+          data: {
+            url: '/?page=notificaciones',
+            tag: `fintrack-alerts-${today()}`,
+            type: 'alert',
+          },
+          android: {
+            priority: 'HIGH',
+            notification: {
+              channel_id: 'fintrack_alerts',
+              sound: 'default',
+            },
+          },
+        },
+      }),
+    });
+
+    if (response.ok) {
+      sent += 1;
+      await adminClient.from('mobile_push_devices').update({ last_used_at: new Date().toISOString() }).eq('id', device.id);
+      continue;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    const errorCode = data?.error?.details?.[0]?.errorCode || data?.error?.status || '';
+    if (['UNREGISTERED', 'INVALID_ARGUMENT', 'NOT_FOUND'].includes(errorCode)) {
+      await adminClient.from('mobile_push_devices').update({ enabled: false }).eq('id', device.id);
+    }
+  }
+
+  return { sent };
+}
+
 async function sendPushSummary(adminClient: ReturnType<typeof createClient>, userId: string, count: number) {
+  const fcm = await sendFcmSummary(adminClient, userId, count);
+  if (fcm.sent || fcm.skipped !== 'firebase_not_configured') return { channel: 'fcm', ...fcm };
+
   const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY') || '';
   const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY') || '';
   const vapidSubject = Deno.env.get('VAPID_SUBJECT') || 'mailto:admin@fintrack.local';
-  if (!vapidPublicKey || !vapidPrivateKey || count <= 0) return { sent: 0, skipped: 'vapid_not_configured' };
+  if (!vapidPublicKey || !vapidPrivateKey || count <= 0) return { sent: 0, skipped: 'push_not_configured' };
 
   const { data: preferences } = await adminClient
     .from('push_preferences')
@@ -110,7 +239,7 @@ async function sendPushSummary(adminClient: ReturnType<typeof createClient>, use
       }
     }
   }
-  return { sent };
+  return { channel: 'web-push', sent };
 }
 
 async function generateForUser(adminClient: ReturnType<typeof createClient>, adminId: string) {

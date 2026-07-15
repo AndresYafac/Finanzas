@@ -1,3 +1,6 @@
+import { Capacitor } from '@capacitor/core';
+import { PushNotifications } from '@capacitor/push-notifications';
+
 const DEFAULT_PREFERENCES = {
   enabled: false,
   debts_enabled: true,
@@ -8,22 +11,21 @@ const DEFAULT_PREFERENCES = {
   reminder_hour: 9,
 };
 
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = `${base64String}${padding}`.replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+function getDeviceName() {
+  const platform = Capacitor.getPlatform();
+  if (platform === 'android') return 'Android';
+  if (platform === 'ios') return 'iOS';
+  return navigator.platform || 'Dispositivo';
 }
 
-function subscriptionToRecord(subscription, userId) {
-  const json = subscription.toJSON();
+function buildNativeRecord(token, userId) {
   return {
     user_id: userId,
-    endpoint: json.endpoint,
-    p256dh: json.keys?.p256dh || '',
-    auth: json.keys?.auth || '',
+    token,
+    provider: 'fcm',
+    platform: Capacitor.getPlatform(),
     user_agent: navigator.userAgent,
-    device_name: navigator.platform || 'Dispositivo',
+    device_name: getDeviceName(),
     enabled: true,
     last_used_at: new Date().toISOString(),
   };
@@ -33,16 +35,17 @@ export function getVapidPublicKey() {
   return import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
 }
 
+export function isNativePushSupported() {
+  return Capacitor.isNativePlatform() && ['android', 'ios'].includes(Capacitor.getPlatform());
+}
+
 export function isPushSupported() {
-  return typeof window !== 'undefined'
-    && 'serviceWorker' in navigator
-    && 'PushManager' in window
-    && 'Notification' in window;
+  return isNativePushSupported();
 }
 
 export function getNotificationPermission() {
-  if (!('Notification' in window)) return 'unsupported';
-  return Notification.permission;
+  if (!isNativePushSupported()) return 'solo app movil';
+  return 'segun dispositivo';
 }
 
 export async function getPushPreferences(supabase, userId) {
@@ -65,39 +68,50 @@ export async function savePushPreferences(supabase, userId, preferences) {
 }
 
 export async function listPushDevices(supabase, userId) {
-  return supabase
-    .from('push_subscriptions')
+  const result = await supabase
+    .from('mobile_push_devices')
     .select('*')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false });
+
+  if (result.error?.code === '42P01') {
+    return { data: [], error: null };
+  }
+
+  return result;
 }
 
 export async function registerPushDevice(supabase, userId) {
-  if (!isPushSupported()) {
-    return { error: { message: 'Este navegador no soporta notificaciones push.' } };
+  if (!isNativePushSupported()) {
+    return { error: { message: 'Las notificaciones push reales solo estan disponibles en la app movil.' } };
   }
 
-  const publicKey = getVapidPublicKey();
-  if (!publicKey) {
-    return { error: { message: 'Falta configurar VITE_VAPID_PUBLIC_KEY.' } };
+  const permission = await PushNotifications.requestPermissions();
+  if (permission.receive !== 'granted') {
+    return { error: { message: 'Permiso de notificaciones denegado en el dispositivo.' } };
   }
 
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') {
-    return { error: { message: 'Permiso de notificaciones denegado.' } };
-  }
+  await PushNotifications.removeAllListeners();
+  const token = await new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error('No se pudo obtener el token del dispositivo.')), 15000);
 
-  const registration = await navigator.serviceWorker.ready;
-  const existing = await registration.pushManager.getSubscription();
-  const subscription = existing || await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(publicKey),
+    PushNotifications.addListener('registration', (nextToken) => {
+      window.clearTimeout(timeout);
+      resolve(nextToken.value);
+    });
+
+    PushNotifications.addListener('registrationError', (error) => {
+      window.clearTimeout(timeout);
+      reject(new Error(error?.error || 'No se pudo registrar el dispositivo.'));
+    });
+
+    PushNotifications.register();
   });
 
-  const record = subscriptionToRecord(subscription, userId);
+  const record = buildNativeRecord(token, userId);
   const { error } = await supabase
-    .from('push_subscriptions')
-    .upsert(record, { onConflict: 'endpoint' });
+    .from('mobile_push_devices')
+    .upsert(record, { onConflict: 'token' });
 
   if (error) return { error };
   const preferences = await savePushPreferences(supabase, userId, { ...DEFAULT_PREFERENCES, enabled: true });
@@ -106,16 +120,15 @@ export async function registerPushDevice(supabase, userId) {
 }
 
 export async function disablePushDevice(supabase, userId) {
-  if (!isPushSupported()) return { error: null };
-  const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.getSubscription();
-  if (subscription) {
-    await supabase
-      .from('push_subscriptions')
+  if (isNativePushSupported()) {
+    const devices = await listPushDevices(supabase, userId);
+    const platform = Capacitor.getPlatform();
+    const activeDevices = (devices.data || []).filter((device) => device.platform === platform && device.enabled);
+    await Promise.all(activeDevices.map((device) => supabase
+      .from('mobile_push_devices')
       .update({ enabled: false })
-      .eq('user_id', userId)
-      .eq('endpoint', subscription.endpoint);
-    await subscription.unsubscribe();
+      .eq('id', device.id)));
+    await PushNotifications.removeAllListeners();
   }
   return savePushPreferences(supabase, userId, { enabled: false });
 }

@@ -12,7 +12,7 @@ import {
   disablePushDevice,
   getNotificationPermission,
   getPushPreferences,
-  getVapidPublicKey,
+  isNativePushSupported,
   isPushSupported,
   listPushDevices,
   registerPushDevice,
@@ -34,8 +34,8 @@ export function Notificaciones({ supabase, user }) {
   const [internalNotifications, setInternalNotifications] = React.useState([]);
   const [status, setStatus] = React.useState('');
   const supported = isPushSupported();
+  const nativeSupported = isNativePushSupported();
   const permission = getNotificationPermission();
-  const hasVapidKey = !!getVapidPublicKey();
 
   async function load() {
     await syncAutomaticNotifications(supabase, user.id);
@@ -138,7 +138,7 @@ export function Notificaciones({ supabase, user }) {
             <div className="notification-icon"><Bell size={26} /></div>
             <div>
               <h4>Alertas del sistema</h4>
-              <p>Las alertas se actualizan automaticamente al ingresar al sistema y mientras usas la app.</p>
+              <p>Las alertas internas aparecen en la campana. El cron automatico las mantiene actualizadas aunque no abras la app.</p>
             </div>
           </section>
           <FormActions>
@@ -168,23 +168,23 @@ export function Notificaciones({ supabase, user }) {
           <section className="notification-hero">
             <div className="notification-icon"><Bell size={26} /></div>
             <div>
-              <h4>Alertas en tu celular</h4>
-              <p>Activa avisos reales del navegador. Para recibirlos con la app cerrada se necesita la tarea programada de Supabase.</p>
+              <h4>Alertas en la app movil</h4>
+              <p>Activa notificaciones nativas de Android. En web solo se usa la campana interna.</p>
             </div>
           </section>
 
           <section className="notification-status-grid">
             <div>
               <span>Soporte</span>
-              <strong>{supported ? 'Compatible' : 'No compatible'}</strong>
+              <strong>{nativeSupported ? 'App movil' : 'Solo web'}</strong>
             </div>
             <div>
               <span>Permiso</span>
               <strong>{permission}</strong>
             </div>
             <div>
-              <span>Clave VAPID</span>
-              <strong>{hasVapidKey ? 'Configurada' : 'Pendiente'}</strong>
+              <span>Canal</span>
+              <strong>{nativeSupported ? 'FCM Android' : 'Campana interna'}</strong>
             </div>
             <div>
               <span>Dispositivos activos</span>
@@ -192,14 +192,14 @@ export function Notificaciones({ supabase, user }) {
             </div>
           </section>
 
-          {!hasVapidKey && (
+          {!nativeSupported && (
             <div className="connection-status">
-              Falta configurar VITE_VAPID_PUBLIC_KEY en Vercel y las claves VAPID privadas en Supabase.
+              Las notificaciones push reales se activan desde la app Android. En esta version web veras las alertas en la campana.
             </div>
           )}
 
           <section className="notification-actions">
-            <Button variant="primary" onClick={activate} disabled={!supported || !hasVapidKey}><Check size={16} />Activar en este dispositivo</Button>
+            <Button variant="primary" onClick={activate} disabled={!supported}><Check size={16} />Activar en este dispositivo</Button>
             <Button onClick={deactivate} disabled={!supported}><Power size={16} />Desactivar este dispositivo</Button>
             <Button onClick={testPush} disabled={!preferences?.enabled}><Send size={16} />Enviar prueba</Button>
           </section>
