@@ -1,7 +1,8 @@
 import React from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Fingerprint } from 'lucide-react';
 import { REMEMBER_EMAIL_KEY, REMEMBER_KEY } from '../../constants/authStorage';
 import { friendlyAuthError, sendPasswordReset, signInWithPassword, signUpUser } from '../../controllers/auth.controller';
+import { getBiometricAvailability, isBiometricEnabled, verifyNativeBiometric } from '../../services/nativeBiometric.service';
 import { storage } from '../../services/storage.service';
 import { getPasswordStrength, validatePassword } from '../../utils/password';
 import { hashPin } from '../../utils/security';
@@ -234,6 +235,18 @@ export function PinUnlock({ supabase, profile, onUnlock, onFullLogout }) {
   const [error, setError] = React.useState('');
   const [attempts, setAttempts] = React.useState(0);
   const [lockedUntil, setLockedUntil] = React.useState(() => Number(storage.getRaw('fintrack_pin_locked_until', '0') || 0));
+  const [biometricAvailable, setBiometricAvailable] = React.useState(false);
+
+  React.useEffect(() => {
+    let alive = true;
+    async function checkBiometric() {
+      if (!isBiometricEnabled()) return;
+      const availability = await getBiometricAvailability();
+      if (alive) setBiometricAvailable(!!availability.available);
+    }
+    checkBiometric();
+    return () => { alive = false; };
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
@@ -266,6 +279,17 @@ export function PinUnlock({ supabase, profile, onUnlock, onFullLogout }) {
     onUnlock();
   }
 
+  async function unlockWithBiometric() {
+    setError('');
+    const result = await verifyNativeBiometric();
+    if (!result.ok) {
+      setError(result.error || 'No se pudo validar la biometria.');
+      return;
+    }
+    storage.remove('fintrack_pin_locked_until');
+    onUnlock();
+  }
+
   return (
     <AuthCard title="Desbloquear FinTrack">
       <form onSubmit={submit}>
@@ -289,6 +313,11 @@ export function PinUnlock({ supabase, profile, onUnlock, onFullLogout }) {
         />
         <div className="pin-unlock-actions">
           <button className="btn-full">Entrar con PIN</button>
+          {biometricAvailable && (
+            <button type="button" className="btn-full" onClick={unlockWithBiometric}>
+              <Fingerprint size={18} /> Desbloquear con biometria
+            </button>
+          )}
         </div>
         {error && <div className="auth-error">{error}</div>}
         <button type="button" className="link-button" onClick={onFullLogout}>Cerrar sesión completa</button>

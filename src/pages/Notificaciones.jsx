@@ -19,6 +19,10 @@ import {
   sendTestPush,
 } from '../services/push.service';
 
+function notifyNotificationsChanged() {
+  window.dispatchEvent(new Event('fintrack:notifications-changed'));
+}
+
 export function Notificaciones({ supabase, user, isAdmin = false }) {
   const [devices, setDevices] = React.useState([]);
   const [adminDevices, setAdminDevices] = React.useState([]);
@@ -116,6 +120,7 @@ export function Notificaciones({ supabase, user, isAdmin = false }) {
       notify(error.message, 'error');
       return;
     }
+    notifyNotificationsChanged();
     await load();
   }
 
@@ -126,6 +131,7 @@ export function Notificaciones({ supabase, user, isAdmin = false }) {
       return;
     }
     notify('Alerta eliminada.', 'success');
+    notifyNotificationsChanged();
     await load();
   }
 

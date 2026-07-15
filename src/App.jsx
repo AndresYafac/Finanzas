@@ -553,6 +553,13 @@ function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
     }
     load();
     const interval = window.setInterval(load, 10 * 60 * 1000);
+    const refreshOnFocus = () => load();
+    const refreshOnVisibility = () => {
+      if (!document.hidden) load();
+    };
+    window.addEventListener('fintrack:notifications-changed', load);
+    window.addEventListener('focus', refreshOnFocus);
+    document.addEventListener('visibilitychange', refreshOnVisibility);
     const channel = supabase
       .channel(`app-notifications-${user.id}`)
       .on(
@@ -564,6 +571,9 @@ function AlertsButton({ supabase, user, open, setOpen, onOpenPage }) {
     return () => {
       mounted = false;
       window.clearInterval(interval);
+      window.removeEventListener('fintrack:notifications-changed', load);
+      window.removeEventListener('focus', refreshOnFocus);
+      document.removeEventListener('visibilitychange', refreshOnVisibility);
       supabase.removeChannel(channel);
     };
   }, [supabase, user.id]);

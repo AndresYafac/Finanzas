@@ -699,6 +699,9 @@
 
   .page-seguridad .security-page {
     width: 100%;
+    max-width: 100%;
+    margin: 0;
+    overflow: hidden;
   }
 
   .page-notificaciones .notifications-page {
@@ -710,6 +713,9 @@
   .page-seguridad .security-stack {
     grid-template-columns: 1fr;
     gap: 14px;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .page-seguridad .security-password-form {
@@ -719,6 +725,34 @@
   .page-seguridad .security-form {
     padding: 14px;
     border-radius: 16px;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .page-seguridad .security-form:first-child .form-row,
+  .page-seguridad .security-form .form-row {
+    grid-template-columns: 1fr;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .page-seguridad .security-form .form-group,
+  .page-seguridad .security-form .input-wrap,
+  .page-seguridad .security-form input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .page-seguridad .security-form .password-strength {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .page-seguridad .security-form .password-strength ul {
+    grid-template-columns: 1fr;
+    gap: 5px;
   }
 
   .page-seguridad .security-form .form-actions,

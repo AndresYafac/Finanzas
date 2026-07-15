@@ -10,7 +10,37 @@ export function listAdminUsers(supabase) {
   return supabase.rpc('admin_listar_usuarios');
 }
 
-export function updateAdminUser(supabase, payload) {
+export async function updateAdminUser(supabase, payload) {
+  const edgeResult = await supabase.functions.invoke('admin-update-user', {
+    body: {
+      userId: payload.p_user_id,
+      email: payload.p_email_auth,
+      profile: {
+        nombre: payload.p_nombre,
+        apellido: payload.p_apellido,
+        tipo_doc: payload.p_tipo_doc,
+        documento: payload.p_documento,
+        email_contacto: payload.p_email_contacto,
+        telefono: payload.p_telefono,
+        direccion: payload.p_direccion,
+        empresa: payload.p_empresa,
+        moneda: payload.p_moneda,
+        role: payload.p_role,
+      },
+    },
+  });
+
+  if (!edgeResult.error) {
+    return edgeResult;
+  }
+
+  const message = edgeResult.error?.message || '';
+  const isFunctionUnavailable = /failed to send|not found|404|function/i.test(message);
+
+  if (!isFunctionUnavailable) {
+    return edgeResult;
+  }
+
   return supabase.rpc('admin_actualizar_usuario', payload);
 }
 

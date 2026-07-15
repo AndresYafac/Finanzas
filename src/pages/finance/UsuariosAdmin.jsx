@@ -71,6 +71,7 @@ const PERMISSION_PRESETS = [
 const userColumns = [
   { key: 'name', label: 'Usuario' },
   { key: 'email', label: 'Correo acceso' },
+  { key: 'emailConfirmed', label: 'Confirmacion' },
   { key: 'contact', label: 'Contacto' },
   { key: 'role', label: 'Rol' },
   { key: 'status', label: 'Estado' },
@@ -164,6 +165,13 @@ function getUserStatus(row) {
   return { text: 'Inactivo', tone: 'yellow' };
 }
 
+function getEmailConfirmation(row) {
+  if (!row.email_auth) return { text: 'Sin correo', tone: 'gray' };
+  if (!Object.prototype.hasOwnProperty.call(row, 'email_confirmed_at')) return { text: 'Sin dato', tone: 'gray' };
+  if (row.email_confirmed_at) return { text: 'Confirmado', tone: 'green' };
+  return { text: 'Pendiente', tone: 'yellow' };
+}
+
 function formatDate(value) {
   return value ? new Date(value).toLocaleDateString('es-PE') : '-';
 }
@@ -173,6 +181,7 @@ function rowToExport(row) {
   return {
     name: userName(row),
     email: row.email_auth || row.email_contacto || '-',
+    emailConfirmed: getEmailConfirmation(row).text,
     contact: row.email_contacto && row.email_contacto !== row.email_auth ? row.email_contacto : row.telefono || '-',
     role: row.role || 'user',
     status: status.text,
@@ -278,7 +287,7 @@ export function UsuariosAdmin({ supabase, user }) {
   const [permissionsUser, setPermissionsUser] = React.useState(null);
   const [permissionRows, setPermissionRows] = React.useState({});
   const [sort, setSort] = React.useState({ key: 'created', direction: 'desc' });
-  const [form, setForm] = React.useState({ nombre: '', apellido: '', tipo_doc: 'DNI', documento: '', email_contacto: '', telefono: '', direccion: '', empresa: '', moneda: 'PEN', role: 'user' });
+  const [form, setForm] = React.useState({ nombre: '', apellido: '', tipo_doc: 'DNI', documento: '', email_auth: '', email_contacto: '', telefono: '', direccion: '', empresa: '', moneda: 'PEN', role: 'user' });
 
   const load = React.useCallback(async () => {
     const { data, error } = await listAdminUsers(supabase);
@@ -299,6 +308,7 @@ export function UsuariosAdmin({ supabase, user }) {
       apellido: row.apellido || '',
       tipo_doc: row.tipo_doc || 'DNI',
       documento: row.documento || '',
+      email_auth: row.email_auth || '',
       email_contacto: row.email_contacto || row.email_auth || '',
       telefono: row.telefono || '',
       direccion: row.direccion || '',
@@ -318,6 +328,7 @@ export function UsuariosAdmin({ supabase, user }) {
       p_apellido: form.apellido,
       p_tipo_doc: form.tipo_doc,
       p_documento: form.documento,
+      p_email_auth: form.email_auth,
       p_email_contacto: form.email_contacto,
       p_telefono: form.telefono,
       p_direccion: form.direccion,
@@ -439,7 +450,7 @@ export function UsuariosAdmin({ supabase, user }) {
   }
 
   const filtered = React.useMemo(() => rows.filter((row) => {
-    const content = `${row.nombre || ''} ${row.apellido || ''} ${row.email_auth || ''} ${row.email_contacto || ''} ${row.telefono || ''} ${row.role || ''}`;
+    const content = `${row.nombre || ''} ${row.apellido || ''} ${row.email_auth || ''} ${row.email_contacto || ''} ${row.telefono || ''} ${row.role || ''} ${getEmailConfirmation(row).text}`;
     if (!content.toLowerCase().includes(query.toLowerCase())) return false;
     const exportRow = rowToExport(row);
     return userColumns.every((column) => {
@@ -454,6 +465,7 @@ export function UsuariosAdmin({ supabase, user }) {
     const values = {
       name: [userName(a), userName(b)],
       email: [a.email_auth || a.email_contacto || '', b.email_auth || b.email_contacto || ''],
+      emailConfirmed: [getEmailConfirmation(a).text, getEmailConfirmation(b).text],
       contact: [a.email_contacto || a.telefono || '', b.email_contacto || b.telefono || ''],
       role: [a.role || 'user', b.role || 'user'],
       status: [getUserStatus(a).text, getUserStatus(b).text],
@@ -710,6 +722,8 @@ function exportPdf() {
                                 </div>
                               ) : column.key === 'role' ? (
                                 <StatusBadge tone={row.role === 'admin' ? 'green' : 'gray'}>{row.role || 'user'}</StatusBadge>
+                              ) : column.key === 'emailConfirmed' ? (
+                                <StatusBadge tone={getEmailConfirmation(row).tone}>{getEmailConfirmation(row).text}</StatusBadge>
                               ) : column.key === 'status' ? (
                                 <StatusBadge tone={status.tone}>{status.text}</StatusBadge>
                               ) : (
@@ -767,6 +781,10 @@ function exportPdf() {
                           <strong className="block truncate text-xs text-slate-800">{row.created_at ? new Date(row.created_at).toLocaleDateString('es-PE') : '-'}</strong>
                         </div>
                       </div>
+                      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3">
+                        <span className="text-xs font-black uppercase tracking-wide text-slate-400">Correo</span>
+                        <StatusBadge tone={getEmailConfirmation(row).tone}>{getEmailConfirmation(row).text}</StatusBadge>
+                      </div>
                       {row.id === user.id ? (
                         <div className="p-3">
                           <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">Usuario actual</span>
@@ -815,6 +833,7 @@ function exportPdf() {
               </SelectField>
               <TextField label="Documento" value={form.documento} onChange={(v) => setForm({ ...form, documento: v })} />
             </div>
+            <TextField label="Correo de acceso" type="email" value={form.email_auth} onChange={(v) => setForm({ ...form, email_auth: v })} />
             <TextField label="Email de contacto" type="email" value={form.email_contacto} onChange={(v) => setForm({ ...form, email_contacto: v })} />
             <TextField label="Teléfono" value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} />
             <TextField label="Dirección" value={form.direccion} onChange={(v) => setForm({ ...form, direccion: v })} />

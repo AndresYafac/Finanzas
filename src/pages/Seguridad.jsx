@@ -1,8 +1,10 @@
 import React from 'react';
-import { Check, Eye, EyeOff, LogOut } from 'lucide-react';
+import { Check, Eye, EyeOff, Fingerprint, LogOut, Power } from 'lucide-react';
 import { clearRememberedAccount } from '../controllers/auth.controller';
 import { updateMobilePin } from '../controllers/profile.controller';
 import { confirmAction } from '../services/feedback';
+import { getBiometricAvailability, isBiometricEnabled, setBiometricEnabled, verifyNativeBiometric } from '../services/nativeBiometric.service';
+import { isNativeApp } from '../services/platform.service';
 import { getPasswordStrength, validatePassword } from '../utils/password';
 import { Button, Card, Field, FormActions } from '../components/ui';
 
@@ -14,7 +16,23 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
   const [confirmPassword, setConfirmPassword] = React.useState('');
   const [passwordStatus, setPasswordStatus] = React.useState('');
   const [showPassword, setShowPassword] = React.useState(false);
+  const [biometricStatus, setBiometricStatus] = React.useState('');
+  const [biometricAvailable, setBiometricAvailable] = React.useState(false);
+  const [biometricEnabled, setBiometricEnabledState] = React.useState(() => isBiometricEnabled());
   const passwordStrength = getPasswordStrength(password, user.email);
+
+  React.useEffect(() => {
+    let alive = true;
+    async function check() {
+      if (!isNativeApp()) return;
+      const availability = await getBiometricAvailability();
+      if (!alive) return;
+      setBiometricAvailable(!!availability.available);
+      if (!availability.available) setBiometricStatus(availability.reason);
+    }
+    check();
+    return () => { alive = false; };
+  }, []);
 
   async function savePin(event) {
     event.preventDefault();
@@ -67,6 +85,31 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
     await supabase.auth.signOut({ scope: 'global' });
   }
 
+  async function activateBiometric() {
+    setBiometricStatus('');
+    const availability = await getBiometricAvailability();
+    if (!availability.available) {
+      setBiometricAvailable(false);
+      setBiometricStatus(availability.reason);
+      return;
+    }
+    const result = await verifyNativeBiometric();
+    if (!result.ok) {
+      setBiometricStatus(result.error);
+      return;
+    }
+    setBiometricEnabled(true);
+    setBiometricEnabledState(true);
+    setBiometricAvailable(true);
+    setBiometricStatus('Biometria activada en este dispositivo.');
+  }
+
+  function deactivateBiometric() {
+    setBiometricEnabled(false);
+    setBiometricEnabledState(false);
+    setBiometricStatus('Biometria desactivada en este dispositivo.');
+  }
+
   return (
     <div className="security-page">
       <Card title="Seguridad de la cuenta" className="security-card">
@@ -85,6 +128,30 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
               <Button variant="primary" type="submit"><Check size={16} />Cambiar PIN</Button>
             </FormActions>
           </form>
+
+          {isNativeApp() && (
+            <section className="security-form">
+              <div className="security-block-head">
+                <h4>Biometria nativa</h4>
+                <p className="muted">Usa la huella, rostro o bloqueo seguro de Android para desbloquear FinTrack. La app no guarda datos biometricos.</p>
+              </div>
+              <div className={`connection-status ${biometricEnabled ? 'success' : ''}`}>
+                {biometricEnabled
+                  ? 'Activa en este dispositivo.'
+                  : biometricAvailable
+                    ? 'Disponible para activar en este dispositivo.'
+                    : biometricStatus || 'Validando disponibilidad...'}
+              </div>
+              {biometricStatus && biometricAvailable && <div className="connection-status success">{biometricStatus}</div>}
+              <FormActions>
+                {biometricEnabled ? (
+                  <Button variant="danger" type="button" onClick={deactivateBiometric}><Power size={16} />Desactivar biometria</Button>
+                ) : (
+                  <Button variant="primary" type="button" onClick={activateBiometric}><Fingerprint size={16} />Activar biometria</Button>
+                )}
+              </FormActions>
+            </section>
+          )}
 
           <form className="security-form security-password-form" onSubmit={savePassword}>
             <div className="security-block-head">
