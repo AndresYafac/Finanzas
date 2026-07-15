@@ -1,6 +1,72 @@
-﻿@import './styles/base.css';
+@import './styles/base.css';
 @import './styles/visual-refresh.css';
 @import './styles/responsive.css';
 @import './styles/dark.css';
 @import './styles/chart-styles.css';
 @import './styles/animations.css';
+
+@tailwind components;
+
+/* Puente para pantallas migradas a Tailwind.
+   El CSS legacy define reglas globales para input/select/table/th/td y reglas
+   de densidad con mas especificidad que Tailwind. Este scope evita que esas
+   reglas deformen los modulos migrados sin tocar el resto del sistema. */
+.tailwind-page,
+.tailwind-page * {
+  box-sizing: border-box;
+}
+
+.tailwind-page input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+.tailwind-page select,
+.tailwind-page textarea {
+  color: inherit;
+  font: inherit;
+}
+
+.tailwind-page input:not([type="checkbox"]):not([type="radio"]):not([type="color"]) {
+  width: 100%;
+}
+
+.tailwind-page select,
+.tailwind-page textarea {
+  width: 100%;
+}
+
+.tailwind-page table {
+  width: 100%;
+}
+
+.tailwind-page th,
+.tailwind-page td {
+  color: inherit;
+  vertical-align: middle;
+}
+
+.tailwind-page button {
+  font: inherit;
+}
+
+:root[data-density="compact"] .tailwind-page input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+:root[data-density="compact"] .tailwind-page select,
+:root[data-density="compact"] .tailwind-page textarea,
+:root[data-density="spacious"] .tailwind-page input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+:root[data-density="spacious"] .tailwind-page select,
+:root[data-density="spacious"] .tailwind-page textarea {
+  min-height: 3rem;
+  padding: 0 1rem;
+}
+
+:root[data-density="compact"] .tailwind-page textarea,
+:root[data-density="spacious"] .tailwind-page textarea {
+  min-height: 6rem;
+  padding-top: .75rem;
+  padding-bottom: .75rem;
+}
+
+:root[data-density="compact"] .tailwind-page th input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+:root[data-density="spacious"] .tailwind-page th input:not([type="checkbox"]):not([type="radio"]):not([type="color"]) {
+  min-height: 2.25rem;
+  padding: 0 .75rem;
+}
+
+@tailwind utilities;
