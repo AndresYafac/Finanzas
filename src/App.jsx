@@ -1,4 +1,5 @@
 import React from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 import {
   BarChart3,
   Banknote,
@@ -8,7 +9,6 @@ import {
   Database,
   LayoutDashboard,
   Bell,
-  Palette,
   CalendarCheck,
   ClipboardPlus,
   Tags,
@@ -34,9 +34,11 @@ import { useVisualConfig } from './hooks/useVisualConfig';
 import { clearFeedbackHandlers, confirmAction, hideBusy, notify, setFeedbackHandlers, showBusy } from './services/feedback';
 import { getProfile } from './services/admin.service';
 import { listInternalNotifications, syncAutomaticNotifications } from './services/notificationsCenter.service';
+import { autoRegisterPushDevice, isNativePushSupported } from './services/push.service';
 import { globalSearch } from './services/search.service';
 import { storage } from './services/storage.service';
 import { isMobileViewport } from './utils/security';
+import { isNativeApp } from './services/platform.service';
 
 const lazyPage = (loader, exportName) => React.lazy(() => loader().then((module) => ({ default: module[exportName] })));
 
@@ -44,7 +46,6 @@ const Dashboard = lazyPage(() => import('./pages/Dashboard'), 'Dashboard');
 const Perfil = lazyPage(() => import('./pages/Perfil'), 'Perfil');
 const Seguridad = lazyPage(() => import('./pages/Seguridad'), 'Seguridad');
 const Notificaciones = lazyPage(() => import('./pages/Notificaciones'), 'Notificaciones');
-const Apariencia = lazyPage(() => import('./pages/Apariencia'), 'Apariencia');
 const CierreMensual = lazyPage(() => import('./pages/finance/CierreMensual'), 'CierreMensual');
 const CajaDiaria = lazyPage(() => import('./pages/finance/CajaDiaria'), 'CajaDiaria');
 const Plantillas = lazyPage(() => import('./pages/finance/Plantillas'), 'Plantillas');
@@ -87,7 +88,6 @@ const PAGE_IDS = [
   'perfil',
   'seguridad',
   'notificaciones',
-  'apariencia',
   'usuarios-admin',
   'config',
 ];
@@ -96,6 +96,29 @@ function isRecoveryUrl() {
   const search = new URLSearchParams(window.location.search);
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   return search.get('recovery') === '1' || search.get('type') === 'recovery' || hash.get('type') === 'recovery';
+}
+
+async function handleNativeAuthUrl(supabase, url) {
+  if (!url || !supabase) return;
+  const parsed = new URL(url);
+  const query = new URLSearchParams(parsed.search);
+  const hash = new URLSearchParams(parsed.hash.replace(/^#/, ''));
+  const code = query.get('code') || hash.get('code');
+  const accessToken = hash.get('access_token');
+  const refreshToken = hash.get('refresh_token');
+
+  if (query.get('recovery') === '1' || hash.get('type') === 'recovery' || query.get('type') === 'recovery') {
+    window.history.replaceState({}, document.title, `${window.location.origin}?recovery=1`);
+  }
+
+  if (code) {
+    await supabase.auth.exchangeCodeForSession(code);
+    return;
+  }
+
+  if (accessToken && refreshToken) {
+    await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+  }
 }
 
 export function App() {
@@ -146,6 +169,21 @@ export function App() {
       }
     });
     return () => data.subscription.unsubscribe();
+  }, [supabase]);
+
+  React.useEffect(() => {
+    if (!supabase || !isNativeApp()) return undefined;
+    let listener;
+    CapacitorApp.addListener('appUrlOpen', ({ url }) => {
+      handleNativeAuthUrl(supabase, url).catch((error) => {
+        setMessage(error?.message || 'No se pudo procesar el enlace de confirmacion.');
+      });
+    }).then((handle) => {
+      listener = handle;
+    });
+    return () => {
+      listener?.remove();
+    };
   }, [supabase]);
 
   React.useEffect(() => {
@@ -239,6 +277,13 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [profile, locked]);
 
+  React.useEffect(() => {
+    if (!supabase || !session?.user || !profile || locked || !isNativePushSupported()) return;
+    autoRegisterPushDevice(supabase, session.user.id).catch(() => {
+      // El usuario puede denegar el permiso del sistema; no debe bloquear el ingreso.
+    });
+  }, [supabase, session?.user?.id, profile?.id, locked]);
+
   if (!supabase) return <><Setup onReady={setSupabase} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (passwordRecovery && session) {
     return <><PasswordRecovery supabase={supabase} onComplete={(nextMessage) => {
@@ -299,7 +344,6 @@ export function App() {
       ['perfil', 'Mi perfil', UserCircle, true],
       ['seguridad', 'Seguridad', ShieldCheck, true],
       ['notificaciones', 'Notificaciones', Bell, true],
-      ['apariencia', 'Apariencia', Palette, true],
       ['usuarios-admin', 'Usuarios', Users, isAdmin],
       ['config', 'Configuracion', Settings, isAdmin],
     ]],
@@ -354,8 +398,7 @@ export function App() {
         {page === 'auditoria' && <Auditoria supabase={supabase} user={session.user} can={(action) => can('auditoria', action)} />}
         {page === 'perfil' && <Perfil supabase={supabase} user={session.user} profile={profile} onSaved={() => setRefreshKey((x) => x + 1)} />}
         {page === 'seguridad' && <Seguridad supabase={supabase} user={session.user} profile={profile} onSaved={() => setRefreshKey((x) => x + 1)} />}
-        {page === 'notificaciones' && <Notificaciones supabase={supabase} user={session.user} />}
-        {page === 'apariencia' && <Apariencia user={session.user} />}
+        {page === 'notificaciones' && <Notificaciones supabase={supabase} user={session.user} isAdmin={isAdmin} />}
         {page === 'usuarios-admin' && isAdmin && <UsuariosAdmin supabase={supabase} user={session.user} />}
         {page === 'config' && isAdmin && <Config onReady={setSupabase} />}
       </div>
@@ -432,7 +475,6 @@ function pageTitle(page, isAdmin) {
     perfil: ['Mi perfil', 'Informacion personal'],
     seguridad: ['Seguridad', 'PIN movil y contrasena'],
     notificaciones: ['Notificaciones', 'Alertas push del dispositivo'],
-    apariencia: ['Apariencia', 'Personalizacion visual del sistema'],
     'usuarios-admin': ['Usuarios', 'Activacion y control de accesos'],
     config: ['Configuracion', 'Conexion a base de datos'],
   };

@@ -703,6 +703,8 @@
 
   .page-notificaciones .notifications-page {
     width: 100%;
+    grid-template-columns: 1fr;
+    gap: 14px;
   }
 
   .page-seguridad .security-stack {
@@ -745,6 +747,10 @@
 
   .notification-actions .btn {
     width: 100%;
+  }
+
+  .notification-actions {
+    grid-template-columns: 1fr;
   }
 
   .appearance-layout,

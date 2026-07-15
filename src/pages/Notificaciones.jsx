@@ -1,6 +1,6 @@
 import React from 'react';
-import { Bell, Check, Power, RefreshCw, Send, Smartphone, Trash2 } from 'lucide-react';
-import { Badge, Button, Card, FormActions, SelectField } from '../components/ui';
+import { Bell, Power, RefreshCw, Send, Smartphone, Trash2, Users } from 'lucide-react';
+import { Badge, Button, Card, FormActions } from '../components/ui';
 import { notify } from '../services/feedback';
 import {
   deleteNotification,
@@ -10,59 +10,65 @@ import {
 } from '../services/notificationsCenter.service';
 import {
   disablePushDevice,
-  getNotificationPermission,
-  getPushPreferences,
+  getNativeNotificationPermission,
   isNativePushSupported,
   isPushSupported,
+  listAdminPushDevices,
   listPushDevices,
   registerPushDevice,
-  savePushPreferences,
   sendTestPush,
 } from '../services/push.service';
 
-const ALERT_OPTIONS = [
-  ['debts_enabled', 'Cuentas por cobrar vencidas o por vencer'],
-  ['budgets_enabled', 'Presupuestos en alerta'],
-  ['goals_enabled', 'Metas vencidas o por revisar'],
-  ['low_balance_enabled', 'Saldos bajos'],
-  ['loans_enabled', 'Prestamos por pagar'],
-];
-
-export function Notificaciones({ supabase, user }) {
-  const [preferences, setPreferences] = React.useState(null);
+export function Notificaciones({ supabase, user, isAdmin = false }) {
   const [devices, setDevices] = React.useState([]);
+  const [adminDevices, setAdminDevices] = React.useState([]);
+  const [adminSummary, setAdminSummary] = React.useState({ users: 0, registered: 0, not_registered: 0, active_devices: 0 });
   const [internalNotifications, setInternalNotifications] = React.useState([]);
   const [status, setStatus] = React.useState('');
+  const [permission, setPermission] = React.useState('verificando');
   const supported = isPushSupported();
   const nativeSupported = isNativePushSupported();
-  const permission = getNotificationPermission();
 
   async function load() {
     await syncAutomaticNotifications(supabase, user.id);
-    const [preferencesResult, devicesResult, internalResult] = await Promise.all([
-      getPushPreferences(supabase, user.id),
+    const [devicesResult, internalResult, permissionResult, adminDevicesResult] = await Promise.all([
       listPushDevices(supabase, user.id),
       listInternalNotifications(supabase, user.id),
+      getNativeNotificationPermission(),
+      isAdmin ? listAdminPushDevices(supabase) : Promise.resolve({ data: [], error: null }),
     ]);
-    setPreferences(preferencesResult.data);
+
     setDevices(devicesResult.data || []);
     setInternalNotifications(internalResult.data || []);
+    setPermission(permissionResult);
+
+    if (isAdmin) {
+      const rows = adminDevicesResult.data || [];
+      setAdminDevices(rows);
+      setAdminSummary(adminDevicesResult.summary || {
+        users: rows.length,
+        registered: rows.filter((device) => device.registered).length,
+        not_registered: rows.filter((device) => !device.registered).length,
+        active_devices: rows.reduce((sum, device) => sum + Number(device.active_devices_count || 0), 0),
+      });
+      if (adminDevicesResult.error) notify(adminDevicesResult.error.message, 'error');
+    }
   }
 
   React.useEffect(() => {
     load();
-  }, [supabase, user.id]);
+  }, [supabase, user.id, isAdmin]);
 
-  async function activate() {
-    setStatus('Solicitando permiso del dispositivo...');
+  async function retryDeviceRegistration() {
+    setStatus('Reintentando registro del dispositivo...');
     const { error } = await registerPushDevice(supabase, user.id);
     if (error) {
       setStatus(error.message);
       notify(error.message, 'error');
       return;
     }
-    setStatus('Notificaciones activadas en este dispositivo.');
-    notify('Notificaciones activadas.', 'success');
+    setStatus('Dispositivo registrado correctamente.');
+    notify('Dispositivo registrado correctamente.', 'success');
     await load();
   }
 
@@ -79,13 +85,6 @@ export function Notificaciones({ supabase, user }) {
     await load();
   }
 
-  async function updatePreference(key, value) {
-    const next = { ...preferences, [key]: value };
-    setPreferences(next);
-    const { error } = await savePushPreferences(supabase, user.id, next);
-    if (error) notify(error.message, 'error');
-  }
-
   async function testPush() {
     setStatus('Enviando notificacion de prueba...');
     const { data, error } = await sendTestPush(supabase);
@@ -98,7 +97,7 @@ export function Notificaciones({ supabase, user }) {
     notify('Notificacion de prueba enviada.', 'success');
   }
 
-  async function generateAlerts() {
+  async function refreshAlerts() {
     setStatus('Actualizando alertas internas...');
     const { data, error } = await syncAutomaticNotifications(supabase, user.id, { force: true });
     if (error) {
@@ -138,11 +137,11 @@ export function Notificaciones({ supabase, user }) {
             <div className="notification-icon"><Bell size={26} /></div>
             <div>
               <h4>Alertas del sistema</h4>
-              <p>Las alertas internas aparecen en la campana. El cron automatico las mantiene actualizadas aunque no abras la app.</p>
+              <p>Las alertas internas aparecen en la campana. El proceso automatico las mantiene actualizadas sin que tengas que generarlas manualmente.</p>
             </div>
           </section>
           <FormActions>
-            <Button variant="primary" onClick={generateAlerts}><RefreshCw size={16} />Actualizar alertas</Button>
+            <Button variant="primary" onClick={refreshAlerts}><RefreshCw size={16} />Actualizar alertas</Button>
             <Button onClick={load}>Actualizar</Button>
           </FormActions>
           <div className="notification-internal-list">
@@ -161,87 +160,77 @@ export function Notificaciones({ supabase, user }) {
               </div>
             )) : <p className="muted">Sin alertas internas registradas.</p>}
           </div>
+          {status && <div className={`connection-status ${status.includes('correctamente') || status.includes('nueva') ? 'success' : ''}`}>{status}</div>}
         </div>
       </Card>
-      <Card title="Notificaciones push" className="notifications-card">
-        <div className="card-body notifications-layout">
-          <section className="notification-hero">
-            <div className="notification-icon"><Bell size={26} /></div>
-            <div>
-              <h4>Alertas en la app movil</h4>
-              <p>Activa notificaciones nativas de Android. En web solo se usa la campana interna.</p>
-            </div>
-          </section>
 
-          <section className="notification-status-grid">
-            <div>
-              <span>Soporte</span>
-              <strong>{nativeSupported ? 'App movil' : 'Solo web'}</strong>
-            </div>
-            <div>
-              <span>Permiso</span>
-              <strong>{permission}</strong>
-            </div>
-            <div>
-              <span>Canal</span>
-              <strong>{nativeSupported ? 'FCM Android' : 'Campana interna'}</strong>
-            </div>
-            <div>
-              <span>Dispositivos activos</span>
-              <strong>{devices.filter((device) => device.enabled).length}</strong>
-            </div>
-          </section>
-
-          {!nativeSupported && (
-            <div className="connection-status">
-              Las notificaciones push reales se activan desde la app Android. En esta version web veras las alertas en la campana.
-            </div>
-          )}
-
-          <section className="notification-actions">
-            <Button variant="primary" onClick={activate} disabled={!supported}><Check size={16} />Activar en este dispositivo</Button>
-            <Button onClick={deactivate} disabled={!supported}><Power size={16} />Desactivar este dispositivo</Button>
-            <Button onClick={testPush} disabled={!preferences?.enabled}><Send size={16} />Enviar prueba</Button>
-          </section>
-
-          {preferences && (
-            <section className="notification-preferences">
-              <h4>Tipos de alerta</h4>
-              <div className="notification-toggle-list">
-                {ALERT_OPTIONS.map(([key, label]) => (
-                  <label key={key} className="notification-toggle">
-                    <span>{label}</span>
-                    <input type="checkbox" checked={!!preferences[key]} onChange={(event) => updatePreference(key, event.target.checked)} />
-                  </label>
-                ))}
+      {isAdmin && (
+        <Card title="Dispositivos de app movil" className="notifications-card">
+          <div className="card-body notifications-layout">
+            <section className="notification-hero">
+              <div className="notification-icon"><Smartphone size={26} /></div>
+              <div>
+                <h4>Control administrativo de notificaciones moviles</h4>
+                <p>Los usuarios no ven esta configuracion. La app Android registra el dispositivo automaticamente cuando el usuario inicia sesion y acepta el permiso del sistema.</p>
               </div>
-              <p className="muted">La hora se usara para el proceso automatico programado de alertas.</p>
-              <SelectField label="Hora para futuros recordatorios automaticos" value={String(preferences.reminder_hour)} onChange={(value) => updatePreference('reminder_hour', Number(value))}>
-                {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}
-              </SelectField>
             </section>
-          )}
 
-          <section className="notification-devices">
-            <h4>Dispositivos registrados</h4>
-            {devices.length ? devices.map((device) => (
-              <div className="notification-device" key={device.id}>
-                <Smartphone size={18} />
-                <div>
-                  <strong>{device.device_name || 'Dispositivo'}</strong>
-                  <span>{device.enabled ? 'Activo' : 'Desactivado'} · {device.updated_at ? new Date(device.updated_at).toLocaleString('es-PE') : ''}</span>
-                </div>
+            <section className="notification-status-grid">
+              <div>
+                <span>Usuarios</span>
+                <strong>{adminSummary.users}</strong>
               </div>
-            )) : <p className="muted">Aun no hay dispositivos registrados.</p>}
-          </section>
+              <div>
+                <span>Registrados</span>
+                <strong>{adminSummary.registered}</strong>
+              </div>
+              <div>
+                <span>Sin registrar</span>
+                <strong>{adminSummary.not_registered}</strong>
+              </div>
+              <div>
+                <span>Dispositivos activos</span>
+                <strong>{adminSummary.active_devices}</strong>
+              </div>
+            </section>
 
-          {status && <div className={`connection-status ${status.includes('activadas') || status.includes('enviada') ? 'success' : ''}`}>{status}</div>}
+            {!nativeSupported ? (
+              <div className="connection-status">
+                Estas viendo la version web. Las notificaciones reales del celular se registran desde la app Android.
+              </div>
+            ) : (
+              <div className="connection-status success">
+                Permiso de este dispositivo: {permission}. Dispositivos activos de tu usuario: {devices.filter((device) => device.enabled).length}.
+              </div>
+            )}
 
-          <FormActions>
-            <Button onClick={load}>Actualizar estado</Button>
-          </FormActions>
-        </div>
-      </Card>
+            <section className="notification-actions">
+              <Button onClick={retryDeviceRegistration} disabled={!supported}><RefreshCw size={16} />Reintentar mi registro</Button>
+              <Button onClick={deactivate} disabled={!supported || !devices.some((device) => device.enabled)}><Power size={16} />Desactivar este dispositivo</Button>
+              <Button variant="primary" onClick={testPush} disabled={!devices.some((device) => device.enabled)}><Send size={16} />Enviar prueba a mi dispositivo</Button>
+            </section>
+
+            <section className="notification-devices">
+              <h4>Usuarios y estado de registro</h4>
+              {adminDevices.length ? adminDevices.map((device) => (
+                <div className={`notification-device admin-device ${device.registered ? 'registered' : 'pending'}`} key={device.user_id}>
+                  {device.registered ? <Smartphone size={18} /> : <Users size={18} />}
+                  <div>
+                    <strong>{[device.nombre, device.apellido].filter(Boolean).join(' ') || device.email || 'Usuario'}</strong>
+                    <span>{device.email || 'Sin correo'} · {device.registered ? `${device.device_name || 'Dispositivo'} activo` : 'Sin app movil registrada'}</span>
+                    {device.last_used_at && <small>Ultimo uso: {new Date(device.last_used_at).toLocaleString('es-PE')}</small>}
+                  </div>
+                  <Badge tone={device.registered ? 'green' : 'yellow'}>{device.registered ? 'Registrado' : 'Pendiente'}</Badge>
+                </div>
+              )) : <p className="muted">Aun no hay usuarios para revisar.</p>}
+            </section>
+
+            <FormActions>
+              <Button onClick={load}>Actualizar estado</Button>
+            </FormActions>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

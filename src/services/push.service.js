@@ -48,6 +48,16 @@ export function getNotificationPermission() {
   return 'segun dispositivo';
 }
 
+export async function getNativeNotificationPermission() {
+  if (!isNativePushSupported()) return 'solo app movil';
+  try {
+    const permission = await PushNotifications.checkPermissions();
+    return permission.receive || 'prompt';
+  } catch {
+    return 'segun dispositivo';
+  }
+}
+
 export async function getPushPreferences(supabase, userId) {
   const { data, error } = await supabase
     .from('push_preferences')
@@ -79,6 +89,15 @@ export async function listPushDevices(supabase, userId) {
   }
 
   return result;
+}
+
+export async function listAdminPushDevices(supabase) {
+  const { data, error } = await supabase.functions.invoke('admin-push-devices', {
+    body: {},
+  });
+  if (error) return { data: [], summary: null, error };
+  if (data?.error) return { data: [], summary: null, error: { message: data.error } };
+  return { data: data?.devices || [], summary: data?.summary || null, error: null };
 }
 
 export async function registerPushDevice(supabase, userId) {
@@ -117,6 +136,21 @@ export async function registerPushDevice(supabase, userId) {
   const preferences = await savePushPreferences(supabase, userId, { ...DEFAULT_PREFERENCES, enabled: true });
   if (preferences.error) return { error: preferences.error };
   return { data: record, error: null };
+}
+
+export async function autoRegisterPushDevice(supabase, userId) {
+  if (!isNativePushSupported()) return { skipped: true, reason: 'not_native' };
+
+  const sessionKey = `fintrack:push:auto-register:${userId}`;
+  if (sessionStorage.getItem(sessionKey) === '1') return { skipped: true, reason: 'already_checked' };
+  sessionStorage.setItem(sessionKey, '1');
+
+  const devices = await listPushDevices(supabase, userId);
+  const platform = Capacitor.getPlatform();
+  const hasActiveDevice = (devices.data || []).some((device) => device.platform === platform && device.enabled);
+  if (hasActiveDevice) return { skipped: true, reason: 'already_registered' };
+
+  return registerPushDevice(supabase, userId);
 }
 
 export async function disablePushDevice(supabase, userId) {

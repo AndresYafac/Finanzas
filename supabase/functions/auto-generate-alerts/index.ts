@@ -119,9 +119,20 @@ async function getFirebaseAccessToken(credentials: { client_email: string; priva
 }
 
 function getFirebaseCredentials() {
-  const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '';
+  const encoded = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_BASE64') || '';
+  const raw = encoded
+    ? new TextDecoder().decode(Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0)))
+    : (Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON') || '');
   if (!raw) return null;
-  return JSON.parse(raw) as { project_id: string; client_email: string; private_key: string };
+  try {
+    const credentials = JSON.parse(raw) as { project_id?: string; client_email?: string; private_key?: string };
+    if (!credentials.project_id || !credentials.client_email || !credentials.private_key) {
+      throw new Error('El JSON de Firebase no contiene project_id, client_email o private_key.');
+    }
+    return credentials as { project_id: string; client_email: string; private_key: string };
+  } catch (error) {
+    throw new Error(`Credenciales Firebase invalidas. Configura FIREBASE_SERVICE_ACCOUNT_BASE64 nuevamente. ${error instanceof Error ? error.message : ''}`);
+  }
 }
 
 async function sendFcmSummary(adminClient: ReturnType<typeof createClient>, userId: string, count: number) {

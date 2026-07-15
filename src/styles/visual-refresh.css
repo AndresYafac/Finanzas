@@ -1428,6 +1428,11 @@ textarea:focus {
   justify-content: center;
 }
 
+.page-notificaciones {
+  display: flex;
+  justify-content: center;
+}
+
 .page-config .profile-section {
   width: min(720px, 100%);
 }
@@ -1438,7 +1443,7 @@ textarea:focus {
 }
 
 .security-page {
-  width: min(980px, 100%);
+  width: min(1280px, 100%);
   margin: 0 auto;
 }
 
@@ -1450,6 +1455,19 @@ textarea:focus {
 
 .security-password-form {
   grid-column: 1 / -1;
+}
+
+.security-form:first-child {
+  grid-column: 1 / -1;
+}
+
+.security-form:first-child .form-row {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  width: min(760px, 100%);
+}
+
+.security-form:first-child .form-actions {
+  width: min(760px, 100%);
 }
 
 .security-form {
@@ -1537,8 +1555,26 @@ textarea:focus {
 }
 
 .notifications-page {
-  width: min(980px, 100%);
+  width: min(1380px, 100%);
   margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.notifications-page .notifications-card:only-child {
+  width: min(760px, 100%);
+  justify-self: center;
+}
+
+.notifications-page:has(.notifications-card:only-child) {
+  grid-template-columns: minmax(0, 760px);
+  justify-content: center;
+}
+
+.notifications-card {
+  min-width: 0;
 }
 
 .notifications-layout {
@@ -1614,9 +1650,13 @@ textarea:focus {
 }
 
 .notification-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.notification-actions .btn {
+  justify-content: center;
 }
 
 .notification-preferences,
@@ -1627,6 +1667,10 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: 18px;
   background: rgba(255, 255, 255, .78);
+}
+
+.notification-preferences {
+  grid-column: 1 / -1;
 }
 
 .notification-toggle-list {
@@ -1659,6 +1703,23 @@ textarea:focus {
   grid-template-columns: 28px 1fr;
   align-items: center;
   gap: 10px;
+}
+
+.notification-device.admin-device {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  background: #fff;
+}
+
+.notification-device.admin-device.pending {
+  background: #fffaf0;
+}
+
+.notification-device.admin-device small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .appearance-page {

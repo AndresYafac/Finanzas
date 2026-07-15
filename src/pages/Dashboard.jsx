@@ -1,6 +1,5 @@
 import React from 'react';
-import { Banknote, BarChart3, Check, CreditCard, FileText, Maximize2, Settings, Settings2, TrendingUp, Wallet } from 'lucide-react';
-import { Button, Card, EmptyState, Modal } from '../components/ui';
+import { Banknote, BarChart3, Check, CreditCard, FileText, Maximize2, Settings, Settings2, TrendingUp, Wallet, X } from 'lucide-react';
 import { getDashboardData } from '../services/dashboard.service';
 import { DynamicChart } from '../components/DynamicChart';
 import { ChartConfig } from '../components/ChartConfig';
@@ -35,6 +34,29 @@ const DEFAULT_CHART_CONFIG = {
   curved: false,
 };
 
+function DashboardModal({ open, title, onClose, children, footer, wide = false }) {
+  if (!open) return null;
+  return (
+    <div className="tailwind-page fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/45 p-4">
+      <section className={`flex max-h-[calc(100vh-2rem)] w-full flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_24px_72px_rgba(15,23,42,0.20)] ${wide ? 'max-w-6xl' : 'max-w-2xl'}`}>
+        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+          <h2 className="text-base font-black text-slate-950">{title}</h2>
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-white hover:text-slate-900"
+            onClick={onClose}
+            aria-label="Cerrar"
+          >
+            <X size={19} />
+          </button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/40 p-5 sm:p-6">{children}</div>
+        {footer && <footer className="border-t border-slate-200 bg-white px-5 py-4">{footer}</footer>}
+      </section>
+    </div>
+  );
+}
+
 function createDefaultChartConfig() {
   const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now();
   return { ...DEFAULT_CHART_CONFIG, id };
@@ -56,27 +78,44 @@ function normalizeChartConfigs(configs) {
 }
 
 function MetricCard({ icon, label, value, helper, danger = false, chart }) {
-  const valueClass = "metric-value " + (danger ? "danger-text" : "");
+  const valueClass = danger ? 'text-red-500' : 'text-slate-950';
   return (
-    <div className="metric-card">
-      <div className="metric-label">{icon}{label}</div>
-      <div className={valueClass}>{value}</div>
-      {chart && <div className="metric-card-chart">{chart}</div>}
-      <div className="metric-change neutral">{helper}</div>
-    </div>
+    <section className="relative flex min-h-[220px] flex-col overflow-hidden rounded-[28px] border border-slate-200/80 border-l-4 border-l-fintrack-green bg-white p-6 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:shadow-xl">
+      <span className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-100/80" />
+      <div className="relative flex items-center gap-2 text-xs font-black uppercase tracking-[0.04em] text-slate-500 [&_svg]:h-5 [&_svg]:w-5">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className={`relative mt-4 text-[32px] font-black leading-none tracking-tight ${valueClass}`}>{value}</div>
+      {chart && <div className="relative mt-5 w-full min-w-0 flex-1">{chart}</div>}
+      <div className="relative mt-4 text-sm font-bold text-slate-500">{helper}</div>
+    </section>
   );
 }
 function MiniBarChart({ items, danger = false, split = false }) {
   const cleanItems = items.filter((item) => Number(item.value || 0) > 0).slice(0, 8);
   const max = Math.max(...cleanItems.map((item) => Number(item.value || 0)), 1);
-  if (!cleanItems.length) return <div className="mini-chart-empty">Sin datos para grafico</div>;
+  if (!cleanItems.length) return <div className="w-full rounded-xl bg-slate-100 px-4 py-3 text-center text-xs font-medium text-slate-500">Sin datos para grafico</div>;
+  const fillColor = (index) => (
+    danger || (split && index === 1)
+      ? 'linear-gradient(90deg, #ef4444 0%, #fb923c 100%)'
+      : 'linear-gradient(90deg, #1d9e75 0%, #52c7a1 100%)'
+  );
   return (
-    <div className="mini-chart">
+    <div className="w-full space-y-2.5">
       {cleanItems.map((item, index) => (
-        <div className="mini-chart-row" key={`${item.label}-${index}`}>
-          <span>{item.label}</span>
-          <div className="mini-chart-track"><i className={`${danger ? 'danger' : ''} ${split && index === 1 ? 'danger' : ''}`} style={{ width: `${Math.max(8, (Number(item.value || 0) / max) * 100)}%` }} /></div>
-          <b>{money(item.value)}</b>
+        <div className="grid w-full grid-cols-[84px_minmax(120px,1fr)_92px] items-center gap-3 text-xs" key={`${item.label}-${index}`}>
+          <span className="min-w-0 truncate text-slate-500" title={item.label}>{item.label}</span>
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+            <span
+              className="block h-full rounded-full"
+              style={{
+                width: `${Math.max(8, (Number(item.value || 0) / max) * 100)}%`,
+                background: fillColor(index),
+              }}
+            />
+          </div>
+          <b className="whitespace-nowrap text-right font-black text-slate-800">{money(item.value)}</b>
         </div>
       ))}
     </div>
@@ -85,11 +124,20 @@ function MiniBarChart({ items, danger = false, split = false }) {
 
 function ListCard({ title, items, empty }) {
   return (
-    <Card title={title}>
-      <div className="card-body">
-        {items.length ? items.map((item) => <div className="list-row" key={item}>{item}</div>) : <EmptyState>{empty}</EmptyState>}
+    <section className="overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-soft">
+      <header className="border-b border-slate-200/80 px-5 py-4">
+        <h3 className="text-base font-black text-slate-950">{title}</h3>
+      </header>
+      <div className="min-h-[150px] p-5">
+        {items.length ? (
+          <div className="space-y-2">
+            {items.map((item) => <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700" key={item}>{item}</div>)}
+          </div>
+        ) : (
+          <div className="flex min-h-[110px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-bold text-slate-500">{empty}</div>
+        )}
       </div>
-    </Card>
+    </section>
   );
 }
 
@@ -247,21 +295,27 @@ export function Dashboard({ supabase, user, isAdmin }) {
     config,
     ...prepareChartData(config.dataSources, data),
   }));
+  const periodButtonClass = (id) => `rounded-xl border px-4 py-2 text-sm font-black transition ${period === id ? 'border-fintrack-green bg-fintrack-green text-white shadow-glow' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950'}`;
+  const toolbarButtonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:border-fintrack-green hover:text-fintrack-green hover:shadow-soft active:translate-y-0';
+  const footerButtonClass = 'rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-800 shadow-sm transition hover:border-slate-400 hover:bg-slate-50';
+  const footerPrimaryClass = 'rounded-2xl border border-fintrack-green bg-fintrack-green px-5 py-3 text-sm font-black text-white shadow-glow transition hover:-translate-y-0.5 hover:bg-fintrack-greenDark';
 
   return (
-    <div className={presentation ? 'dashboard-presentation' : ''}>
-      <div className="dashboard-toolbar">
-        <div className="dashboard-period-tabs">
-          <button className={period === 'month' ? 'active' : ''} type="button" onClick={() => setPeriod('month')}>Este mes</button>
-          <button className={period === 'quarter' ? 'active' : ''} type="button" onClick={() => setPeriod('quarter')}>Ultimos 3 meses</button>
-          <button className={period === 'all' ? 'active' : ''} type="button" onClick={() => setPeriod('all')}>Todo</button>
+    <div className={`tailwind-page ${presentation ? 'dashboard-presentation' : ''}`}>
+      <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="inline-flex w-fit rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+          <button className={periodButtonClass('month')} type="button" onClick={() => setPeriod('month')}>Este mes</button>
+          <button className={periodButtonClass('quarter')} type="button" onClick={() => setPeriod('quarter')}>Ultimos 3 meses</button>
+          <button className={periodButtonClass('all')} type="button" onClick={() => setPeriod('all')}>Todo</button>
         </div>
-        <Button onClick={exportDashboardPdf}><FileText size={16} />Exportar PDF</Button>
-        <Button onClick={() => setPresentation((value) => !value)}><Maximize2 size={16} />{presentation ? 'Salir presentacion' : 'Presentacion'}</Button>
-        <Button onClick={openDashboardConfig}><Settings size={16} />Configurar dashboard</Button>
-        <Button onClick={openChartConfig}><BarChart3 size={16} />Configurar grafico</Button>
+        <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
+          <button className={toolbarButtonClass} type="button" onClick={exportDashboardPdf}><FileText size={16} />Exportar PDF</button>
+          <button className={toolbarButtonClass} type="button" onClick={() => setPresentation((value) => !value)}><Maximize2 size={16} />{presentation ? 'Salir presentacion' : 'Presentacion'}</button>
+          <button className={toolbarButtonClass} type="button" onClick={openDashboardConfig}><Settings size={16} />Configurar dashboard</button>
+          <button className={toolbarButtonClass} type="button" onClick={openChartConfig}><BarChart3 size={16} />Configurar grafico</button>
+        </div>
       </div>
-      <div className="metrics-grid">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-4">
         {visibleCards.map((cardId) => {
           if (cardId === 'balance') return <MetricCard key={cardId} icon={<Wallet />} label={`Balance consolidado (${currencyConfig.base})`} value={formatCurrency(balanceTotal, currencyConfig.base)} helper={`${data.cuentas.length} cuentas - ${Object.entries(balanceByCurrency).map(([c, v]) => `${c} ${v.toFixed(2)}`).join(' / ') || 'sin saldos'}`} trend={balanceTotal > 0 ? 'up' : 'neutral'} chart={<MiniBarChart items={accountChart} />} />;
           if (cardId === 'pendiente') return <MetricCard key={cardId} icon={<CreditCard />} label="Cuentas por cobrar" value={money(pendiente)} helper={`${data.deudas.filter((deuda) => calcEstado(deuda) !== 'pagado').length} cuentas activas`} danger trend="down" chart={<MiniBarChart items={debtChart} danger />} />;
@@ -270,16 +324,16 @@ export function Dashboard({ supabase, user, isAdmin }) {
           return null;
         })}
       </div>
-      {!visibleCards.length && <Card className="empty-dashboard"><div className="card-body muted">Activa al menos una tarjeta desde Configurar dashboard.</div></Card>}
-      <div className="grid-2">
+      {!visibleCards.length && <section className="mt-5 rounded-[24px] border border-dashed border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-500 shadow-soft">Activa al menos una tarjeta desde Configurar dashboard.</section>}
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
         <ListCard title="Cuentas por cobrar por vencer" empty="Sin cuentas por cobrar por vencer" items={porVencer.map((deuda) => `${deuda.clientes?.nombre || ''} - ${deuda.descripcion}: ${money(Number(deuda.monto_total || 0) - Number(deuda.monto_pagado || 0))}`)} />
         <ListCard title="Ultimos cobros recibidos" empty="Sin cobros registrados" items={data.pagos.slice(0, 5).map((pago) => `${dateFmt(pago.fecha)} - ${pago.clientes?.nombre || ''}: ${money(pago.monto)}`)} />
       </div>
-      <div className="grid-2 dashboard-extra">
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
         <ListCard title="Alertas de presupuesto" empty="Sin presupuestos en alerta" items={presupuestoAlerts.map((presupuesto) => `${presupuesto.label}: ${money(presupuesto.usado)} de ${money(presupuesto.limite)} (${presupuesto.pct}%)`)} />
         <ListCard title="Metas proximas" empty="Sin metas proximas" items={metasAlerts.map((meta) => `${meta.nombre}: ${meta.pct}% completado (${money(meta.monto_actual)} / ${money(meta.monto_objetivo)})`)} />
       </div>
-      <div className="charts-grid">
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
         {chartsDataResults.map((result, index) => {
           const config = result.config;
           const sources = result.sources;
@@ -291,60 +345,75 @@ export function Dashboard({ supabase, user, isAdmin }) {
           if (allData.length === 0) return null;
 
           return (
-            <Card key={index} className="chart-card">
-              <div className="chart-card-header">
-                <h3 className="chart-card-title">
+            <section key={index} className="overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-soft">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-5 py-4">
+                <h3 className="text-base font-black text-slate-950">
                   {sources.map((s) => DATA_SOURCES_LABELS[s] || s).join(' + ')}
                 </h3>
-                <div className="chart-card-actions">
-                  <button onClick={openChartConfig} title="Configurar graficos">
+                <div>
+                  <button className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-fintrack-green hover:text-fintrack-green" onClick={openChartConfig} title="Configurar graficos">
                     <Settings2 size={18} />
                   </button>
                 </div>
               </div>
-              <DynamicChart
-                type={config.type}
-                data={allData}
-                config={{
-                  ...firstConfig,
-                  showGrid: config.showGrid,
-                  showLegend: config.showLegend,
-                  showTooltip: config.showTooltip,
-                  curved: config.curved,
-                }}
-                height={config.height}
-              />
-            </Card>
+              <div className="p-4">
+                <DynamicChart
+                  type={config.type}
+                  data={allData}
+                  config={{
+                    ...firstConfig,
+                    showGrid: config.showGrid,
+                    showLegend: config.showLegend,
+                    showTooltip: config.showTooltip,
+                    curved: config.curved,
+                  }}
+                  height={config.height}
+                />
+              </div>
+            </section>
           );
         })}
       </div>
-      <Modal open={configOpen} title="Configurar dashboard" onClose={closeDashboardConfig}>
-        <div className="modal-body">
-          <div className="dashboard-config-hero">
-            <div>
-              <strong>Personaliza tu resumen</strong>
-              <p>Activa solo las tarjetas que necesitas ver al iniciar sesion.</p>
-            </div>
-            <span>{draftCards.length}/{DASHBOARD_CARD_OPTIONS.length} activas</span>
+      <DashboardModal
+        open={configOpen}
+        title="Configurar dashboard"
+        onClose={closeDashboardConfig}
+        footer={(
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button className={footerButtonClass} type="button" onClick={() => setDraftCards(DEFAULT_DASHBOARD_CARDS)}>Restablecer</button>
+            <button className={footerButtonClass} type="button" onClick={closeDashboardConfig}>Cancelar</button>
+            <button className={footerPrimaryClass} type="button" onClick={saveDashboardConfig}>Guardar</button>
           </div>
-          <div className="dashboard-config-help">Las tarjetas ocultas no se muestran en el dashboard. El orden se mantiene segun esta lista.</div>
-          <div className="dashboard-options-grid">
+        )}
+      >
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 rounded-2xl border border-slate-300 bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.08)] sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <strong className="block text-lg font-black text-slate-950">Personaliza tu resumen</strong>
+              <p className="mt-1 text-sm font-medium text-slate-500">Activa solo las tarjetas que necesitas ver al iniciar sesion.</p>
+            </div>
+            <span className="w-fit rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-fintrack-green">{draftCards.length}/{DASHBOARD_CARD_OPTIONS.length} activas</span>
+          </div>
+          <div className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-500 shadow-[0_8px_20px_rgba(15,23,42,0.06)]">Las tarjetas ocultas no se muestran en el dashboard. El orden se mantiene segun esta lista.</div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {DASHBOARD_CARD_OPTIONS.map((card) => {
               const active = draftCards.includes(card.id);
               const Icon = card.Icon;
               return (
                 <div
                   key={card.id}
-                  className={`dashboard-option-card ${active ? 'active' : ''}`}
+                  className={`flex min-h-[142px] flex-col rounded-3xl border p-4 shadow-[0_14px_34px_rgba(15,23,42,0.10)] transition ${active ? 'border-fintrack-green bg-emerald-50/55 ring-2 ring-emerald-100' : 'border-slate-300 bg-white hover:border-slate-400'}`}
                 >
-                  <span className="dashboard-option-icon"><Icon size={22} /></span>
-                  <span className="dashboard-option-copy">
-                    <b>{card.label}</b>
-                    <small>{card.description}</small>
-                  </span>
+                  <div className="flex items-start gap-3">
+                    <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${active ? 'border-emerald-200 bg-emerald-50 text-fintrack-green' : 'border-slate-200 bg-slate-50 text-slate-500'}`}><Icon size={21} /></span>
+                    <span className="min-w-0 flex-1">
+                      <b className="block text-sm font-black leading-snug text-slate-950">{card.label}</b>
+                      <small className="mt-1 block text-sm font-medium leading-relaxed text-slate-500">{card.description}</small>
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    className={`dashboard-option-toggle ${active ? 'active' : ''}`}
+                    className={`mt-4 inline-flex w-full shrink-0 items-center justify-center gap-1 rounded-xl border px-4 py-2.5 text-sm font-black transition ${active ? 'border-fintrack-green bg-fintrack-green text-white shadow-sm hover:bg-fintrack-greenDark' : 'border-slate-300 bg-white text-slate-700 hover:border-fintrack-green hover:text-fintrack-green'}`}
                     onClick={() => toggleDraftCard(card.id)}
                   >
                     {active ? <><Check size={15} /> Visible</> : 'Activar'}
@@ -354,17 +423,10 @@ export function Dashboard({ supabase, user, isAdmin }) {
             })}
           </div>
         </div>
-        <div className="modal-footer">
-          <Button onClick={() => setDraftCards(DEFAULT_DASHBOARD_CARDS)}>Restablecer</Button>
-          <Button onClick={closeDashboardConfig}>Cancelar</Button>
-          <Button variant="primary" onClick={saveDashboardConfig}>Guardar</Button>
-        </div>
-      </Modal>
-      <Modal open={chartConfigOpen} title="Configurar graficos" onClose={closeChartConfig} className="chart-config-modal" footer={chartConfigFooter}>
-        <div className="modal-body">
-          <ChartConfig configs={chartConfigs} onChange={saveChartConfig} onClose={closeChartConfig} onActionsChange={setChartConfigFooter} />
-        </div>
-      </Modal>
+      </DashboardModal>
+      <DashboardModal open={chartConfigOpen} title="Configurar graficos" onClose={closeChartConfig} footer={chartConfigFooter} wide>
+        <ChartConfig configs={chartConfigs} onChange={saveChartConfig} onClose={closeChartConfig} onActionsChange={setChartConfigFooter} />
+      </DashboardModal>
     </div>
   );
 }
