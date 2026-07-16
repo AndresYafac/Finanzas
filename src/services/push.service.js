@@ -92,12 +92,50 @@ export async function listPushDevices(supabase, userId) {
 }
 
 export async function listAdminPushDevices(supabase) {
-  const { data, error } = await supabase.functions.invoke('admin-push-devices', {
-    body: {},
-  });
-  if (error) return { data: [], summary: null, error };
+  const { data, error } = await invokeFunctionWithSession(supabase, 'admin-push-devices', {});
+  if (error) return { data: [], summary: null, error: { message: await getFunctionErrorMessage(error, 'No se pudo consultar dispositivos moviles.') } };
   if (data?.error) return { data: [], summary: null, error: { message: data.error } };
   return { data: data?.devices || [], summary: data?.summary || null, error: null };
+}
+
+async function invokeFunctionWithSession(supabase, name, body) {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+
+  if (sessionError || !accessToken) {
+    return {
+      data: null,
+      error: { message: 'Sesion no valida. Cierra sesion e ingresa nuevamente.' },
+    };
+  }
+
+  return supabase.functions.invoke(name, {
+    body,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+}
+
+async function getFunctionErrorMessage(error, fallback = 'No se pudo completar la operacion.') {
+  const rawMessage = error?.message || '';
+
+  try {
+    const response = error?.context;
+    if (response && typeof response.clone === 'function') {
+      const payload = await response.clone().json();
+      if (payload?.error) return payload.error;
+      if (payload?.message) return payload.message;
+    }
+  } catch {
+    // Supabase sometimes exposes only the generic FunctionsHttpError.
+  }
+
+  if (/non-2xx status code/i.test(rawMessage)) {
+    return 'No se pudo enviar la notificacion. Revisa la configuracion Firebase del backend.';
+  }
+
+  return rawMessage || fallback;
 }
 
 export async function registerPushDevice(supabase, userId) {
@@ -168,15 +206,20 @@ export async function disablePushDevice(supabase, userId) {
 }
 
 export async function sendTestPush(supabase) {
-  const { data, error } = await supabase.functions.invoke('send-push', {
-    body: {
-      title: 'FinTrack Pro',
-      body: 'Notificacion de prueba enviada correctamente.',
-      url: '/',
-      tag: 'fintrack-test',
-    },
+  const { data, error } = await invokeFunctionWithSession(supabase, 'send-push', {
+    title: 'FinTrack Pro',
+    body: 'Notificacion de prueba enviada correctamente.',
+    url: '/',
+    tag: 'fintrack-test',
   });
-  if (error) return { data: null, error };
+  if (error) return { data: null, error: { message: await getFunctionErrorMessage(error, 'No se pudo enviar la notificacion de prueba.') } };
   if (data?.error) return { data: null, error: { message: data.error } };
+  if (data?.skipped) return { data, error: { message: data.reason || 'No hay dispositivos activos para enviar la notificacion.' } };
+  if (!Number(data?.sent || 0) && Number(data?.failed || 0)) {
+    return { data, error: { message: 'La notificacion no se pudo entregar al dispositivo registrado. Reintenta el registro desde la app movil.' } };
+  }
+  if (!Number(data?.sent || 0)) {
+    return { data, error: { message: 'No hay dispositivos moviles activos para recibir la prueba.' } };
+  }
   return { data, error: null };
 }
