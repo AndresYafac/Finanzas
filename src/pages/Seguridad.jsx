@@ -18,6 +18,8 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
   const [showPassword, setShowPassword] = React.useState(false);
   const [biometricStatus, setBiometricStatus] = React.useState('');
   const [biometricAvailable, setBiometricAvailable] = React.useState(false);
+  const [biometricChecking, setBiometricChecking] = React.useState(false);
+  const [biometricBusy, setBiometricBusy] = React.useState(false);
   const [biometricEnabled, setBiometricEnabledState] = React.useState(() => isBiometricEnabled());
   const passwordStrength = getPasswordStrength(password, user.email);
 
@@ -25,13 +27,25 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
     let alive = true;
     async function check() {
       if (!isNativeApp()) return;
-      const availability = await getBiometricAvailability();
-      if (!alive) return;
-      setBiometricAvailable(!!availability.available);
-      if (!availability.available) setBiometricStatus(availability.reason);
+      setBiometricChecking(true);
+      setBiometricStatus('Validando disponibilidad...');
+      try {
+        const availability = await getBiometricAvailability();
+        if (!alive) return;
+        setBiometricAvailable(!!availability.available);
+        setBiometricStatus(availability.available ? '' : availability.reason);
+      } catch (error) {
+        if (!alive) return;
+        setBiometricAvailable(false);
+        setBiometricStatus(error?.message || 'No se pudo validar la biometria nativa.');
+      } finally {
+        if (alive) setBiometricChecking(false);
+      }
     }
     check();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   async function savePin(event) {
@@ -86,22 +100,30 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
   }
 
   async function activateBiometric() {
-    setBiometricStatus('');
-    const availability = await getBiometricAvailability();
-    if (!availability.available) {
-      setBiometricAvailable(false);
-      setBiometricStatus(availability.reason);
-      return;
+    if (biometricBusy) return;
+    setBiometricBusy(true);
+    setBiometricStatus('Esperando validacion del dispositivo...');
+    try {
+      const availability = await getBiometricAvailability();
+      if (!availability.available) {
+        setBiometricAvailable(false);
+        setBiometricStatus(availability.reason);
+        return;
+      }
+      const result = await verifyNativeBiometric();
+      if (!result.ok) {
+        setBiometricAvailable(false);
+        setBiometricStatus(result.error);
+        return;
+      }
+      setBiometricEnabled(true);
+      setBiometricEnabledState(true);
+      setBiometricAvailable(true);
+      setBiometricStatus('Biometria activada en este dispositivo.');
+    } finally {
+      setBiometricBusy(false);
+      setBiometricChecking(false);
     }
-    const result = await verifyNativeBiometric();
-    if (!result.ok) {
-      setBiometricStatus(result.error);
-      return;
-    }
-    setBiometricEnabled(true);
-    setBiometricEnabledState(true);
-    setBiometricAvailable(true);
-    setBiometricStatus('Biometria activada en este dispositivo.');
   }
 
   function deactivateBiometric() {
@@ -138,16 +160,24 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
               <div className={`connection-status ${biometricEnabled ? 'success' : ''}`}>
                 {biometricEnabled
                   ? 'Activa en este dispositivo.'
-                  : biometricAvailable
+                  : biometricBusy
+                    ? 'Esperando validacion del dispositivo...'
+                    : biometricChecking
+                      ? 'Validando disponibilidad...'
+                      : biometricAvailable
                     ? 'Disponible para activar en este dispositivo.'
                     : biometricStatus || 'Validando disponibilidad...'}
               </div>
-              {biometricStatus && biometricAvailable && <div className="connection-status success">{biometricStatus}</div>}
+              {biometricStatus && biometricAvailable && !biometricBusy && !biometricChecking && (
+                <div className="connection-status success">{biometricStatus}</div>
+              )}
               <FormActions>
                 {biometricEnabled ? (
                   <Button variant="danger" type="button" onClick={deactivateBiometric}><Power size={16} />Desactivar biometria</Button>
                 ) : (
-                  <Button variant="primary" type="button" onClick={activateBiometric}><Fingerprint size={16} />Activar biometria</Button>
+                  <Button variant="primary" type="button" disabled={biometricBusy} onClick={activateBiometric}>
+                    <Fingerprint size={16} />{biometricBusy ? 'Validando...' : 'Activar biometria'}
+                  </Button>
                 )}
               </FormActions>
             </section>
