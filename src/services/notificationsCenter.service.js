@@ -2,7 +2,7 @@ import { getAlertData } from './dashboard.service';
 import { today } from '../utils/format';
 import { getOperationalAccounts } from './cuentas.service';
 
-const MANAGED_ALERT_MODULES = ['deudas', 'prestamos-recibidos', 'cuentas', 'presupuestos', 'metas'];
+const MANAGED_ALERT_MODULES = ['deudas', 'prestamos-recibidos', 'cuentas', 'presupuestos', 'metas', 'movimientos'];
 const AUTO_ALERTS_INTERVAL_MS = 10 * 60 * 1000;
 
 export function listInternalNotifications(supabase, adminId) {
@@ -40,12 +40,28 @@ function daysBetween(dateValue) {
   return Math.ceil((end.getTime() - start.getTime()) / 86400000);
 }
 
+function daysSince(dateValue) {
+  if (!dateValue) return null;
+  const start = new Date(`${dateValue}T00:00:00`);
+  const end = new Date(`${today()}T00:00:00`);
+  return Math.floor((end.getTime() - start.getTime()) / 86400000);
+}
+
+function numberValue(value) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function movementLabel(movement) {
+  return movement.categoria || movement.tipo_movimiento_id || movement.tipo || 'Movimiento';
+}
+
 export async function generateAutomaticNotifications(supabase, adminId) {
   const data = await getAlertData(supabase, adminId);
   const notifications = [];
 
   data.deudas.forEach((deuda) => {
-    const saldo = Number(deuda.monto_total || 0) - Number(deuda.monto_pagado || 0);
+    const saldo = numberValue(deuda.monto_total) - numberValue(deuda.monto_pagado);
     const days = daysBetween(deuda.fecha_vencimiento);
     if (saldo <= 0 || days === null || days > 7) return;
     notifications.push({
@@ -59,7 +75,7 @@ export async function generateAutomaticNotifications(supabase, adminId) {
   });
 
   data.prestamosRecibidos.forEach((prestamo) => {
-    const saldo = Number(prestamo.saldo_inicial || prestamo.monto_original || 0) - Number(prestamo.monto_pagado || 0);
+    const saldo = numberValue(prestamo.saldo_inicial || prestamo.monto_original) - numberValue(prestamo.monto_pagado);
     const days = daysBetween(prestamo.fecha_vencimiento);
     if (saldo <= 0 || days === null || days > 7) return;
     notifications.push({
@@ -73,12 +89,80 @@ export async function generateAutomaticNotifications(supabase, adminId) {
   });
 
   getOperationalAccounts(data.cuentas).forEach((cuenta) => {
-    if (Number(cuenta.saldo || 0) > 20) return;
+    if (numberValue(cuenta.saldo) > 20) return;
     notifications.push({
       admin_id: adminId,
       tipo: 'warning',
       titulo: 'Saldo bajo',
-      mensaje: `${cuenta.banco} ${cuenta.tipo || ''}: S/ ${Number(cuenta.saldo || 0).toFixed(2)}.`,
+      mensaje: `${cuenta.banco} ${cuenta.tipo || ''}: S/ ${numberValue(cuenta.saldo).toFixed(2)}.`,
+      modulo: 'cuentas',
+      referencia_id: cuenta.id,
+    });
+  });
+
+  data.presupuestos.forEach((presupuesto) => {
+    const used = data.movimientos
+      .filter((movimiento) => movimiento.tipo === presupuesto.tipo
+        && ((presupuesto.tipo_movimiento_id && movimiento.tipo_movimiento_id === presupuesto.tipo_movimiento_id)
+          || (!presupuesto.tipo_movimiento_id && (movimiento.categoria || '') === (presupuesto.categoria || ''))))
+      .reduce((sum, movimiento) => sum + numberValue(movimiento.monto), 0);
+    const limit = numberValue(presupuesto.monto_limite);
+    const pct = limit ? Math.round((used / limit) * 100) : 0;
+    if (!limit || pct < 80) return;
+    notifications.push({
+      admin_id: adminId,
+      tipo: pct >= 100 ? 'danger' : 'warning',
+      titulo: pct >= 100 ? 'Presupuesto superado' : 'Presupuesto en alerta',
+      mensaje: `${presupuesto.tipos_movimiento?.nombre || presupuesto.categoria || presupuesto.tipo}: ${pct}%.`,
+      modulo: 'presupuestos',
+      referencia_id: presupuesto.id,
+    });
+  });
+
+  data.metas.forEach((meta) => {
+    if (!meta.fecha_objetivo || meta.fecha_objetivo > today()) return;
+    notifications.push({
+      admin_id: adminId,
+      tipo: 'warning',
+      titulo: 'Meta por revisar',
+      mensaje: `${meta.nombre}: S/ ${numberValue(meta.monto_actual).toFixed(2)} / S/ ${numberValue(meta.monto_objetivo).toFixed(2)}.`,
+      modulo: 'metas',
+      referencia_id: meta.id,
+    });
+  });
+
+  const amounts = data.movimientos.map((movimiento) => numberValue(movimiento.monto)).filter((amount) => amount > 0);
+  const averageAmount = amounts.length ? amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length : 0;
+  const highMovementThreshold = Math.max(300, averageAmount * 2.5);
+  data.movimientos.forEach((movimiento) => {
+    const amount = numberValue(movimiento.monto);
+    if (!amount || amount < highMovementThreshold) return;
+    notifications.push({
+      admin_id: adminId,
+      tipo: 'warning',
+      titulo: 'Movimiento alto inusual',
+      mensaje: `${movementLabel(movimiento)} por S/ ${amount.toFixed(2)} supera el comportamiento normal del mes.`,
+      modulo: 'movimientos',
+      referencia_id: movimiento.id,
+    });
+  });
+
+  const lastMovementByAccount = new Map();
+  data.movimientos.forEach((movimiento) => {
+    if (!movimiento.cuenta_id || !movimiento.fecha) return;
+    const current = lastMovementByAccount.get(movimiento.cuenta_id);
+    if (!current || movimiento.fecha > current) lastMovementByAccount.set(movimiento.cuenta_id, movimiento.fecha);
+  });
+  getOperationalAccounts(data.cuentas).forEach((cuenta) => {
+    if (numberValue(cuenta.saldo) <= 0) return;
+    const lastMovement = lastMovementByAccount.get(cuenta.id);
+    const days = lastMovement ? daysSince(lastMovement) : 31;
+    if (days === null || days < 30) return;
+    notifications.push({
+      admin_id: adminId,
+      tipo: 'warning',
+      titulo: 'Cuenta sin movimiento',
+      mensaje: `${cuenta.banco} ${cuenta.tipo || ''} no registra movimientos hace ${lastMovement ? `${days} dias` : 'mas de 30 dias'}.`,
       modulo: 'cuentas',
       referencia_id: cuenta.id,
     });

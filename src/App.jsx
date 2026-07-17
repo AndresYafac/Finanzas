@@ -124,6 +124,7 @@ async function handleNativeAuthUrl(supabase, url) {
 export function App() {
   const [supabase, setSupabase] = React.useState(createStoredClient);
   const [session, setSession] = React.useState(null);
+  const [authReady, setAuthReady] = React.useState(false);
   const [profile, setProfile] = React.useState(null);
   const [profileLoading, setProfileLoading] = React.useState(false);
   const [passwordRecovery, setPasswordRecovery] = React.useState(() => isRecoveryUrl());
@@ -139,6 +140,7 @@ export function App() {
   const [locked, setLocked] = React.useState(() => storage.getRaw(LOCKED_KEY) === '1');
   const [alertsOpen, setAlertsOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const nativePinPromptedRef = React.useRef(false);
   const { can, isAdmin } = usePermissions({ supabase, session, profile });
   const { companyConfig, installPrompt, sidebarHidden, updateWaiting, isMobile, offline, toggleSidebar, applyUpdate, installApp } = useVisualConfig(session?.user?.id);
 
@@ -157,11 +159,15 @@ export function App() {
 
   React.useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => {
-      const nextSession = data.session || null;
-      setSession((current) => (current?.access_token === nextSession?.access_token ? current : nextSession));
-    });
+    setAuthReady(false);
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        const nextSession = data.session || null;
+        setSession((current) => (current?.access_token === nextSession?.access_token ? current : nextSession));
+      })
+      .finally(() => setAuthReady(true));
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setAuthReady(true);
       setSession((current) => (current?.access_token === nextSession?.access_token ? current : nextSession));
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true);
@@ -228,6 +234,34 @@ export function App() {
   }, [locked, profile]);
 
   React.useEffect(() => {
+    if (!isNativeApp() || !profile || locked || profile.pin_hash) return;
+    if (page !== 'seguridad') {
+      setPage('seguridad');
+      storage.setRaw(LAST_PAGE_KEY, 'seguridad');
+    }
+    if (!nativePinPromptedRef.current) {
+      notify('Configura un PIN para desbloquear la app movil.', 'warning');
+      nativePinPromptedRef.current = true;
+    }
+  }, [locked, page, profile]);
+
+  React.useEffect(() => {
+    if (!isNativeApp() || !profile?.pin_hash || !session?.user || locked) return undefined;
+    let listener;
+    CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive) {
+        storage.setRaw(LOCKED_KEY, '1');
+        setLocked(true);
+      }
+    }).then((handle) => {
+      listener = handle;
+    });
+    return () => {
+      listener?.remove?.();
+    };
+  }, [locked, profile?.pin_hash, session?.user?.id]);
+
+  React.useEffect(() => {
     if (!supabase || !session?.user || locked) return undefined;
     let logoutTimer;
     let warningTimer;
@@ -285,6 +319,7 @@ export function App() {
   }, [supabase, session?.user?.id, profile?.id, locked]);
 
   if (!supabase) return <><Setup onReady={setSupabase} /><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
+  if (!authReady) return <><AuthCard title="FinTrack Pro"><p className="muted">{isNativeApp() ? 'Preparando app...' : 'Validando sesion...'}</p></AuthCard><AppDialogs toast={toast} onCloseToast={() => setToast(null)} confirmState={confirmState} setConfirmState={setConfirmState} busy={busy} /></>;
   if (passwordRecovery && session) {
     return <><PasswordRecovery supabase={supabase} onComplete={(nextMessage) => {
       setPasswordRecovery(false);
@@ -350,7 +385,7 @@ export function App() {
   ];
 
   async function logout() {
-    const canLock = isMobileViewport() && storage.getRaw(REMEMBER_KEY) === '1' && profile?.pin_hash;
+    const canLock = (isNativeApp() || (isMobileViewport() && storage.getRaw(REMEMBER_KEY) === '1')) && profile?.pin_hash;
     if (canLock) {
       storage.setRaw(LOCKED_KEY, '1');
       setLocked(true);
@@ -424,6 +459,7 @@ export function App() {
       alerts={<AlertsButton supabase={supabase} user={session.user} open={alertsOpen} setOpen={setAlertsOpen} onOpenPage={openPage} />}
       onOpenPage={openPage}
       onLogout={logout}
+      logoutLabel={isNativeApp() && profile?.pin_hash ? 'Bloquear app' : 'Cerrar sesión'}
       onToggleMobileSidebar={toggleMobileSidebar}
       onCloseMobileSidebar={() => setSidebarOpen(false)}
       onToggleSidebar={toggleSidebar}

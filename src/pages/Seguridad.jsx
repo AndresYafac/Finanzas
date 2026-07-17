@@ -101,6 +101,10 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
 
   async function activateBiometric() {
     if (biometricBusy) return;
+    if (!profile?.pin_hash) {
+      setBiometricStatus('Primero configura un PIN movil. La biometria usa ese flujo como respaldo.');
+      return;
+    }
     setBiometricBusy(true);
     setBiometricStatus('Esperando validacion del dispositivo...');
     try {
@@ -139,7 +143,7 @@ export function Seguridad({ supabase, user, profile, onSaved }) {
           <form className="security-form" onSubmit={savePin}>
             <div className="security-block-head">
               <h4>PIN movil</h4>
-              <p className="muted">Crea un PIN de 6 digitos para desbloquear la app cuando uses Recordar cuenta.</p>
+              <p className="muted">Crea un PIN de 6 digitos para desbloquear la app en este dispositivo.</p>
             </div>
             <div className="form-row">
               <Field label="Nuevo PIN" type="password" value={pin} maxLength={6} onChange={setPin} />

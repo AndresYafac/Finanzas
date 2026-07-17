@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import webpush from 'npm:web-push@3.6.7';
 
-const MANAGED_MODULES = ['deudas', 'prestamos-recibidos', 'cuentas', 'presupuestos', 'metas'];
+const MANAGED_MODULES = ['deudas', 'prestamos-recibidos', 'cuentas', 'presupuestos', 'metas', 'movimientos'];
 const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
@@ -50,6 +50,13 @@ function daysBetween(dateValue: string | null | undefined) {
   return Math.ceil((end.getTime() - start.getTime()) / 86400000);
 }
 
+function daysSince(dateValue: string | null | undefined) {
+  if (!dateValue) return null;
+  const start = new Date(`${dateValue}T00:00:00Z`);
+  const end = new Date(`${today()}T00:00:00Z`);
+  return Math.floor((end.getTime() - start.getTime()) / 86400000);
+}
+
 function notificationKey(notification: { modulo?: string; referencia_id?: string; titulo?: string }) {
   return `${notification.modulo || ''}|${notification.referencia_id || ''}|${notification.titulo || ''}`;
 }
@@ -61,6 +68,10 @@ function numberValue(value: unknown) {
 
 function isLinkedWallet(account: { tipo_entidad?: string; cuenta_vinculada_id?: string | null }) {
   return account.tipo_entidad === 'billetera' && Boolean(account.cuenta_vinculada_id);
+}
+
+function movementLabel(movement: { categoria?: string | null; tipo_movimiento_id?: string | null; tipo?: string | null }) {
+  return movement.categoria || movement.tipo_movimiento_id || movement.tipo || 'Movimiento';
 }
 
 function base64UrlEncode(value: string | ArrayBuffer) {
@@ -265,7 +276,7 @@ async function generateForUser(adminClient: ReturnType<typeof createClient>, adm
   ] = await Promise.all([
     adminClient.from('deudas').select('id,descripcion,fecha_vencimiento,monto_total,monto_pagado').eq('admin_id', adminId),
     adminClient.from('presupuestos').select('id,categoria,tipo,monto_limite,tipo_movimiento_id,tipos_movimiento(nombre)').eq('admin_id', adminId).eq('mes', month()),
-    adminClient.from('movimientos').select('id,tipo,categoria,tipo_movimiento_id,monto,fecha').eq('admin_id', adminId).gte('fecha', `${month()}-01`).lte('fecha', today()),
+    adminClient.from('movimientos').select('id,tipo,categoria,tipo_movimiento_id,cuenta_id,monto,fecha').eq('admin_id', adminId).gte('fecha', `${month()}-01`).lte('fecha', today()),
     adminClient.from('metas').select('id,nombre,monto_objetivo,monto_actual,fecha_objetivo,estado').eq('admin_id', adminId).eq('estado', 'activa'),
     adminClient.from('cuentas').select('id,banco,tipo,tipo_entidad,cuenta_vinculada_id,saldo,moneda').eq('admin_id', adminId),
     adminClient.from('prestamos_recibidos').select('id,acreedor,descripcion,monto_original,saldo_inicial,monto_pagado,fecha_vencimiento').eq('admin_id', adminId),
@@ -315,6 +326,47 @@ async function generateForUser(adminClient: ReturnType<typeof createClient>, adm
       tipo: 'warning',
       titulo: 'Saldo bajo',
       mensaje: `${cuenta.banco} ${cuenta.tipo || ''}: S/ ${numberValue(cuenta.saldo).toFixed(2)}.`,
+      modulo: 'cuentas',
+      referencia_id: cuenta.id,
+    });
+  }
+
+  const movementAmounts = (movimientosResult.data || [])
+    .map((movimiento) => numberValue(movimiento.monto))
+    .filter((amount) => amount > 0);
+  const averageAmount = movementAmounts.length
+    ? movementAmounts.reduce((sum, amount) => sum + amount, 0) / movementAmounts.length
+    : 0;
+  const highMovementThreshold = Math.max(300, averageAmount * 2.5);
+  for (const movimiento of movimientosResult.data || []) {
+    const amount = numberValue(movimiento.monto);
+    if (!amount || amount < highMovementThreshold) continue;
+    notifications.push({
+      admin_id: adminId,
+      tipo: 'warning',
+      titulo: 'Movimiento alto inusual',
+      mensaje: `${movementLabel(movimiento)} por S/ ${amount.toFixed(2)} supera el comportamiento normal del mes.`,
+      modulo: 'movimientos',
+      referencia_id: movimiento.id,
+    });
+  }
+
+  const lastMovementByAccount = new Map<string, string>();
+  for (const movimiento of movimientosResult.data || []) {
+    if (!movimiento.cuenta_id || !movimiento.fecha) continue;
+    const current = lastMovementByAccount.get(movimiento.cuenta_id);
+    if (!current || movimiento.fecha > current) lastMovementByAccount.set(movimiento.cuenta_id, movimiento.fecha);
+  }
+  for (const cuenta of cuentasResult.data || []) {
+    if (isLinkedWallet(cuenta) || numberValue(cuenta.saldo) <= 0) continue;
+    const lastMovement = lastMovementByAccount.get(cuenta.id);
+    const days = lastMovement ? daysSince(lastMovement) : 31;
+    if (days === null || days < 30) continue;
+    notifications.push({
+      admin_id: adminId,
+      tipo: 'warning',
+      titulo: 'Cuenta sin movimiento',
+      mensaje: `${cuenta.banco} ${cuenta.tipo || ''} no registra movimientos hace ${lastMovement ? `${days} dias` : 'mas de 30 dias'}.`,
       modulo: 'cuentas',
       referencia_id: cuenta.id,
     });

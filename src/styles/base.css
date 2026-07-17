@@ -120,6 +120,7 @@ textarea { width: 100%; min-height: 80px; padding: 10px 14px; border: 1.5px soli
 .auth-error { color: var(--danger); font-size: 12px; margin-top: 10px; text-align: center; }
 .check-row { display: flex; align-items: flex-start; gap: 10px; margin: -4px 0 16px; color: var(--text-muted); font-size: 13px; line-height: 1.35; cursor: pointer; }
 .check-row input { width: 16px; height: 16px; margin-top: 1px; accent-color: var(--primary); flex-shrink: 0; }
+.native-session-note { margin: -4px 0 16px; padding: 12px 14px; border: 1px solid rgba(29, 158, 117, .22); border-radius: 14px; background: rgba(29, 158, 117, .08); color: var(--text-muted); font-size: 13px; line-height: 1.4; }
 .pin-user { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
 .pin-user strong, .pin-user span { display: block; }
 .pin-user span { margin-top: 2px; color: var(--text-muted); font-size: 12px; }

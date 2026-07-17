@@ -5,10 +5,12 @@ import { DynamicChart } from '../components/DynamicChart';
 import { ChartConfig } from '../components/ChartConfig';
 import { prepareChartData } from '../services/chartData.service';
 import { convertAmount, formatCurrency, getCurrencyConfig, summarizeByCurrency } from '../services/currency.service';
+import { getDashboardPreferences, saveDashboardPreferences } from '../services/userSettings.service';
 import { calcEstado, dateFmt, money, month } from '../utils/format';
 
 const DASHBOARD_CARDS_KEY = 'fintrack_dashboard_cards';
 const DASHBOARD_CHART_KEY = 'fintrack_dashboard_chart';
+const dashboardStorageKey = (baseKey, userId) => `${baseKey}:${userId || 'guest'}`;
 const DASHBOARD_CARD_OPTIONS = [
   { id: 'balance', label: 'Balance de cuentas', description: 'Saldo total y distribucion por cuenta.', Icon: Wallet },
   { id: 'pendiente', label: 'Cuentas por cobrar', description: 'Importe pendiente de cobro.', Icon: CreditCard },
@@ -75,6 +77,36 @@ function normalizeChartConfigs(configs) {
     showTooltip: config?.showTooltip !== false,
     curved: Boolean(config?.curved),
   }));
+}
+
+function getLocalDashboardPreferences(userId) {
+  let cards = DEFAULT_DASHBOARD_CARDS;
+  let charts = [createDefaultChartConfig()];
+
+  try {
+    const savedCards = JSON.parse(localStorage.getItem(dashboardStorageKey(DASHBOARD_CARDS_KEY, userId)) || 'null');
+    cards = Array.isArray(savedCards) && savedCards.length ? savedCards : DEFAULT_DASHBOARD_CARDS;
+  } catch {
+    cards = DEFAULT_DASHBOARD_CARDS;
+  }
+
+  try {
+    const savedCharts = JSON.parse(localStorage.getItem(dashboardStorageKey(DASHBOARD_CHART_KEY, userId)) || 'null');
+    charts = normalizeChartConfigs(savedCharts);
+  } catch {
+    charts = [createDefaultChartConfig()];
+  }
+
+  return { cards, charts };
+}
+
+function saveLocalDashboardPreferences(userId, preferences) {
+  if (preferences.cards !== undefined) {
+    localStorage.setItem(dashboardStorageKey(DASHBOARD_CARDS_KEY, userId), JSON.stringify(preferences.cards));
+  }
+  if (preferences.charts !== undefined) {
+    localStorage.setItem(dashboardStorageKey(DASHBOARD_CHART_KEY, userId), JSON.stringify(preferences.charts));
+  }
 }
 
 function MetricCard({ icon, label, value, helper, danger = false, chart }) {
@@ -150,22 +182,9 @@ export function Dashboard({ supabase, user, isAdmin }) {
   const [chartConfigOpen, setChartConfigOpen] = React.useState(false);
   const [chartConfigFooter, setChartConfigFooter] = React.useState(null);
   const [draftCards, setDraftCards] = React.useState(DEFAULT_DASHBOARD_CARDS);
-  const [visibleCards, setVisibleCards] = React.useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(DASHBOARD_CARDS_KEY) || 'null');
-      return Array.isArray(saved) && saved.length ? saved : DEFAULT_DASHBOARD_CARDS;
-    } catch {
-      return DEFAULT_DASHBOARD_CARDS;
-    }
-  });
-  const [chartConfigs, setChartConfigs] = React.useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(DASHBOARD_CHART_KEY) || 'null');
-      return normalizeChartConfigs(saved);
-    } catch {
-      return [createDefaultChartConfig()];
-    }
-  });
+  const [visibleCards, setVisibleCards] = React.useState(DEFAULT_DASHBOARD_CARDS);
+  const [chartConfigs, setChartConfigs] = React.useState(() => [createDefaultChartConfig()]);
+  const preferencesLoadedRef = React.useRef(false);
 
   React.useEffect(() => {
     async function load() {
@@ -181,12 +200,49 @@ export function Dashboard({ supabase, user, isAdmin }) {
   }, []);
 
   React.useEffect(() => {
-    localStorage.setItem(DASHBOARD_CARDS_KEY, JSON.stringify(visibleCards));
-  }, [visibleCards]);
+    let active = true;
+
+    async function loadPreferences() {
+      preferencesLoadedRef.current = false;
+      const localPreferences = getLocalDashboardPreferences(user.id);
+      setVisibleCards(localPreferences.cards);
+      setChartConfigs(localPreferences.charts);
+
+      const { data: remotePreferences, error } = await getDashboardPreferences(supabase, user.id);
+      if (!active) return;
+
+      if (!error && remotePreferences) {
+        const remoteCards = Array.isArray(remotePreferences.cards) && remotePreferences.cards.length
+          ? remotePreferences.cards
+          : DEFAULT_DASHBOARD_CARDS;
+        const remoteCharts = normalizeChartConfigs(remotePreferences.charts);
+        setVisibleCards(remoteCards);
+        setChartConfigs(remoteCharts);
+        saveLocalDashboardPreferences(user.id, { cards: remoteCards, charts: remoteCharts });
+      } else if (!error) {
+        await saveDashboardPreferences(supabase, user.id, localPreferences);
+      }
+
+      if (active) preferencesLoadedRef.current = true;
+    }
+
+    loadPreferences();
+    return () => {
+      active = false;
+    };
+  }, [supabase, user.id]);
 
   React.useEffect(() => {
-    localStorage.setItem(DASHBOARD_CHART_KEY, JSON.stringify(chartConfigs));
-  }, [chartConfigs]);
+    if (!preferencesLoadedRef.current) return;
+    saveLocalDashboardPreferences(user.id, { cards: visibleCards });
+    saveDashboardPreferences(supabase, user.id, { cards: visibleCards });
+  }, [supabase, visibleCards, user.id]);
+
+  React.useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    saveLocalDashboardPreferences(user.id, { charts: chartConfigs });
+    saveDashboardPreferences(supabase, user.id, { charts: chartConfigs });
+  }, [chartConfigs, supabase, user.id]);
 
   const isVisible = (id) => visibleCards.includes(id);
   function openDashboardConfig() {

@@ -24,7 +24,7 @@ export async function getAlertData(supabase, adminId) {
   const [deudas, presupuestos, movimientos, metas, cuentas, prestamosRecibidos] = await Promise.all([
     supabase.from('deudas').select('id,descripcion,fecha_vencimiento,monto_total,monto_pagado,tipo,clientes(nombre,apellido)').eq('admin_id', adminId),
     supabase.from('presupuestos').select('id,categoria,tipo,monto_limite,tipo_movimiento_id,tipos_movimiento(nombre)').eq('admin_id', adminId).eq('mes', month()),
-    supabase.from('movimientos').select('id,tipo,categoria,tipo_movimiento_id,monto,fecha').eq('admin_id', adminId).gte('fecha', `${month()}-01`).lte('fecha', today()),
+    supabase.from('movimientos').select('id,tipo,categoria,tipo_movimiento_id,cuenta_id,monto,fecha').eq('admin_id', adminId).gte('fecha', `${month()}-01`).lte('fecha', today()),
     supabase.from('metas').select('id,nombre,monto_objetivo,monto_actual,fecha_objetivo,estado').eq('admin_id', adminId).eq('estado', 'activa'),
     supabase.from('cuentas').select('id,banco,tipo,tipo_entidad,cuenta_vinculada_id,saldo,moneda').eq('admin_id', adminId),
     supabase.from('prestamos_recibidos').select('id,acreedor,descripcion,monto_original,saldo_inicial,monto_pagado,fecha_vencimiento').eq('admin_id', adminId),

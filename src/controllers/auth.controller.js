@@ -29,7 +29,7 @@ export function friendlyAuthError(error) {
   const message = error?.message || '';
   if (/email not confirmed/i.test(message)) return 'Debes confirmar tu correo antes de ingresar.';
   if (/rate limit|too many|429/i.test(message)) return 'Demasiados intentos. Espera unos minutos antes de volver a intentar.';
-  if (/invalid login credentials|invalid credentials/i.test(message)) return 'Correo o contrasena incorrectos, o la cuenta ya no existe.';
+  if (/invalid login credentials|invalid credentials/i.test(message)) return 'Correo o contraseña incorrectos, o la cuenta ya no existe.';
   if (/network|fetch/i.test(message)) return 'No se pudo conectar. Revisa tu conexión a internet.';
   return message || 'No se pudo completar la autenticación.';
 }
@@ -48,7 +48,9 @@ export async function signInWithPassword({ supabase, email, password, remember }
   }
   clearLoginState(email);
 
-  if (remember) {
+  const shouldRemember = remember || isNativeApp();
+
+  if (shouldRemember) {
     storage.setRaw(REMEMBER_KEY, '1');
     storage.setRaw(REMEMBER_EMAIL_KEY, normalizeEmail(email));
     storage.remove(LOCKED_KEY);

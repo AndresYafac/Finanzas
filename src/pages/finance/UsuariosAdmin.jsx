@@ -46,6 +46,13 @@ const PERMISSION_PRESETS = [
     mode: 'full',
   },
   {
+    id: 'cash',
+    label: 'Caja',
+    description: 'Dinero operativo',
+    modules: ['dashboard', 'cuentas', 'movimientos', 'caja-diaria', 'plantillas', 'categorias-inteligentes'],
+    mode: 'full',
+  },
+  {
     id: 'collection',
     label: 'Cobranza',
     description: 'Principal + Cobros',
@@ -58,13 +65,6 @@ const PERMISSION_PRESETS = [
     description: 'Ver sin editar',
     modules: MODULE_PERMISSIONS.map(([moduleId]) => moduleId),
     mode: 'read',
-  },
-  {
-    id: 'full',
-    label: 'Usuario completo',
-    description: 'Todo operativo',
-    modules: MODULE_PERMISSIONS.map(([moduleId]) => moduleId),
-    mode: 'full',
   },
 ];
 

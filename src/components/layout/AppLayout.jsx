@@ -11,7 +11,7 @@ function fullName(profile) {
   return [profile?.nombre, profile?.apellido].filter(Boolean).join(' ');
 }
 
-export function Sidebar({ pages, page, profile, user, isAdmin, sidebarOpen, onOpenPage, onLogout, LogoIcon, logoUrl }) {
+export function Sidebar({ pages, page, profile, user, isAdmin, sidebarOpen, onOpenPage, onLogout, logoutLabel = 'Cerrar sesión', LogoIcon, logoUrl }) {
   return (
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div className="sidebar-logo">
@@ -41,7 +41,7 @@ export function Sidebar({ pages, page, profile, user, isAdmin, sidebarOpen, onOp
             </React.Fragment>
           );
         })}
-        <button className="nav-item logout" onClick={onLogout}><LogOut size={18} /> Cerrar sesión</button>
+        <button className="nav-item logout" onClick={onLogout}><LogOut size={18} /> {logoutLabel}</button>
       </nav>
       <div className="sidebar-footer">
         <div className="user-mini" onClick={() => onOpenPage('perfil')}>
@@ -67,6 +67,7 @@ export function Topbar({
   onApplyUpdate,
   onInstall,
   onLogout,
+  logoutLabel = 'Salir',
   search,
   alerts,
 }) {
@@ -87,7 +88,7 @@ export function Topbar({
             {alerts}
             {updateWaiting && <Button iconOnly onClick={onApplyUpdate} title="Actualizar app" aria-label="Actualizar app"><RefreshCw size={18} /></Button>}
             {installPrompt && <Button iconOnly variant="primary" title="Instalar app" aria-label="Instalar app" onClick={onInstall}><Download size={18} /></Button>}
-            <Button iconOnly className="mobile-logout-btn" onClick={onLogout} title="Salir" aria-label="Salir"><LogOut size={18} /></Button>
+            <Button iconOnly className="mobile-logout-btn" onClick={onLogout} title={logoutLabel} aria-label={logoutLabel}><LogOut size={18} /></Button>
           </div>
           <div className="topbar-mobile-search">{search}</div>
         </>
@@ -133,6 +134,7 @@ export function AppLayout({
   alerts,
   onOpenPage,
   onLogout,
+  logoutLabel,
   onToggleMobileSidebar,
   onCloseMobileSidebar,
   onToggleSidebar,
@@ -169,7 +171,7 @@ export function AppLayout({
         {offline ? 'Sin conexion. Las operaciones pendientes se sincronizaran al volver la conexion.' : `${pendingCount} operaciones pendientes por sincronizar.`}
       </div>
       {isMobile && <button className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`} type="button" aria-label="Cerrar menú" onClick={onCloseMobileSidebar} />}
-      <Sidebar pages={pages} page={page} profile={profile} user={user} isAdmin={isAdmin} sidebarOpen={sidebarOpen} onOpenPage={onOpenPage} onLogout={onLogout} LogoIcon={LogoIcon} logoUrl={logoUrl} />
+      <Sidebar pages={pages} page={page} profile={profile} user={user} isAdmin={isAdmin} sidebarOpen={sidebarOpen} onOpenPage={onOpenPage} onLogout={onLogout} logoutLabel={logoutLabel} LogoIcon={LogoIcon} logoUrl={logoUrl} />
       <main className="main">
         <Topbar
           isMobile={isMobile}
@@ -182,6 +184,7 @@ export function AppLayout({
           onApplyUpdate={onApplyUpdate}
           onInstall={onInstall}
           onLogout={onLogout}
+          logoutLabel={logoutLabel}
           search={search}
           alerts={alerts}
         />
