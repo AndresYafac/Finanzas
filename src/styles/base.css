@@ -201,6 +201,18 @@ textarea { width: 100%; min-height: 80px; padding: 10px 14px; border: 1.5px soli
 .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); color: #fff; }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn[aria-busy="true"] { cursor: wait; opacity: .9; }
+.btn:disabled { cursor: not-allowed; opacity: .62; }
+.btn-spinner { width: 15px; height: 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; animation: spin .75s linear infinite; flex: 0 0 auto; }
+.btn-primary .btn-spinner { border-color: rgba(255,255,255,.72); border-right-color: transparent; }
+button.btn-loading { display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: wait; opacity: .92; }
+button.btn-loading::before { content: ''; width: 15px; height: 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; animation: spin .75s linear infinite; flex: 0 0 auto; }
+button.btn-loading.btn-primary::before,
+button.btn-loading.btn-full::before,
+button.btn-loading[class*="bg-emerald"]::before,
+button.btn-loading[class*="bg-green"]::before,
+button.btn-loading[class*="bg-red"]::before,
+button.btn-loading[class*="bg-fintrack"]::before { border-color: rgba(255,255,255,.72); border-right-color: transparent; }
 .card { background: var(--surface); border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow); }
 .card-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
 .card-header h3 { font-size: 14px; font-weight: 800; }
@@ -256,6 +268,7 @@ tbody tr:hover { background: var(--bg); }
 .movement-form { grid-template-columns: 130px 1.4fr 1fr 120px 150px auto; }
 .form-card { margin-bottom: 20px; }
 .action-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+.action-bar-end { justify-content: flex-end; }
 .table-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12px; }
 .pagination-actions { display: flex; align-items: center; gap: 8px; }
@@ -468,6 +481,10 @@ tbody tr:hover { background: var(--bg); }
 .busy-overlay { position: fixed; inset: 0; z-index: 650; display: flex; align-items: center; justify-content: center; pointer-events: none; background: rgba(8, 17, 31, .16); backdrop-filter: blur(2px); }
 .busy-card { display: inline-flex; align-items: center; gap: 12px; padding: 14px 18px; border: 1px solid rgba(221, 229, 238, .9); border-radius: 18px; background: rgba(255, 255, 255, .96); box-shadow: var(--shadow-strong); color: var(--text); }
 .busy-spinner { width: 22px; height: 22px; border: 3px solid #dbe7ef; border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
+.swal2-container { z-index: 1200 !important; }
+.fintrack-swal-toast { background: rgba(255,255,255,.98) !important; border: 1px solid rgba(221,229,238,.95) !important; border-radius: 16px !important; box-shadow: 0 8px 20px rgba(15,32,51,.08) !important; padding: 10px 12px !important; }
+.fintrack-swal-title { color: var(--text) !important; font-size: 13px !important; font-weight: 800 !important; line-height: 1.35 !important; }
+.fintrack-swal-progress { background: var(--primary) !important; }
 .quick-actions { position: fixed; right: 24px; bottom: 24px; z-index: 120; display: grid; justify-items: end; gap: 10px; }
 .quick-actions-toggle { width: 56px; height: 56px; border: 0; border-radius: 20px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; box-shadow: 0 18px 44px rgba(29, 158, 117, .34); display: inline-flex; align-items: center; justify-content: center; transition: transform .16s ease, box-shadow .16s ease; }
 .quick-actions.open .quick-actions-toggle { transform: rotate(45deg); }

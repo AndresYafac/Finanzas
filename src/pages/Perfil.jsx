@@ -2,6 +2,7 @@ import React from 'react';
 import { Check } from 'lucide-react';
 import { updateProfile } from '../controllers/profile.controller';
 import { Button, Card, Field, FormActions, SelectField } from '../components/ui';
+import { notify } from '../services/feedback';
 
 function initials(profile, email) {
   return ((profile?.nombre?.[0] || '') + (profile?.apellido?.[0] || '')).toUpperCase() || email?.[0]?.toUpperCase() || '?';
@@ -23,7 +24,6 @@ export function Perfil({ supabase, user, profile, onSaved }) {
     empresa: '',
     moneda: 'PEN',
   });
-  const [status, setStatus] = React.useState('');
 
   React.useEffect(() => setForm({
     nombre: profile?.nombre || '',
@@ -39,13 +39,12 @@ export function Perfil({ supabase, user, profile, onSaved }) {
 
   async function save(event) {
     event.preventDefault();
-    setStatus('');
     const { error } = await updateProfile({ supabase, userId: user.id, form });
     if (error) {
-      setStatus(error.message);
+      notify(error.message);
       return;
     }
-    setStatus('Perfil actualizado correctamente.');
+    notify('Perfil actualizado correctamente.', 'success');
     onSaved?.();
   }
 
@@ -83,7 +82,6 @@ export function Perfil({ supabase, user, profile, onSaved }) {
             <option value="USD">Dolares ($)</option>
             <option value="EUR">Euros (EUR)</option>
           </SelectField>
-          {status && <div className={`connection-status ${status.includes('correctamente') ? 'success' : ''}`}>{status}</div>}
           <FormActions><Button variant="primary" type="submit"><Check size={16} />Guardar cambios</Button></FormActions>
         </form>
       </Card>

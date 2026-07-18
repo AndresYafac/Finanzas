@@ -3,11 +3,12 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Download,
+  Eye,
   FileSpreadsheet,
   FileText,
   KeyRound,
   Pencil,
-  Search,
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
@@ -176,6 +177,13 @@ function formatDate(value) {
   return value ? new Date(value).toLocaleDateString('es-PE') : '-';
 }
 
+function toInputMonth(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 7);
+}
+
 function rowToExport(row) {
   const status = getUserStatus(row);
   return {
@@ -275,14 +283,21 @@ function EmptyUsers() {
 
 export function UsuariosAdmin({ supabase, user }) {
   const [rows, setRows] = React.useState([]);
-  const [query, setQuery] = React.useState('');
-  const [columnFilters, setColumnFilters] = React.useState({});
+  const [filters, setFilters] = React.useState({
+    value: '',
+    status: 'all',
+    role: 'all',
+    confirmed: 'all',
+    from: '',
+    to: '',
+  });
   const [hiddenColumns, setHiddenColumns] = React.useState({});
   const [optionsOpen, setOptionsOpen] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
   const [open, setOpen] = React.useState(false);
   const [permissionsOpen, setPermissionsOpen] = React.useState(false);
+  const [detailUser, setDetailUser] = React.useState(null);
   const [editingId, setEditingId] = React.useState(null);
   const [permissionsUser, setPermissionsUser] = React.useState(null);
   const [permissionRows, setPermissionRows] = React.useState({});
@@ -434,31 +449,49 @@ export function UsuariosAdmin({ supabase, user }) {
     }));
   }
 
-  function updateColumnFilter(key, value) {
-    setColumnFilters((current) => ({ ...current, [key]: value }));
-  }
-
   function toggleColumn(key) {
     setHiddenColumns((current) => ({ ...current, [key]: !current[key] }));
   }
 
   function resetTableOptions() {
-    setColumnFilters({});
     setHiddenColumns({});
     setPageSize(10);
     setPage(1);
   }
 
-  const filtered = React.useMemo(() => rows.filter((row) => {
-    const content = `${row.nombre || ''} ${row.apellido || ''} ${row.email_auth || ''} ${row.email_contacto || ''} ${row.telefono || ''} ${row.role || ''} ${getEmailConfirmation(row).text}`;
-    if (!content.toLowerCase().includes(query.toLowerCase())) return false;
-    const exportRow = rowToExport(row);
-    return userColumns.every((column) => {
-      const filter = String(columnFilters[column.key] || '').trim().toLowerCase();
-      if (!filter) return true;
-      return String(exportRow[column.key] || '').toLowerCase().includes(filter);
+  function clearFilters() {
+    setFilters({
+      value: '',
+      status: 'all',
+      role: 'all',
+      confirmed: 'all',
+      from: '',
+      to: '',
     });
-  }), [rows, query, columnFilters]);
+  }
+
+  function openDetail(row) {
+    setDetailUser(row);
+  }
+
+  const filtered = React.useMemo(() => rows.filter((row) => {
+    const exportRow = rowToExport(row);
+    const filterValue = filters.value.trim().toLowerCase();
+    if (filterValue) {
+      const fieldText = userColumns.map((column) => exportRow[column.key]).join(' ');
+      if (!textValue(fieldText).includes(filterValue)) return false;
+    }
+
+    if (filters.status !== 'all' && textValue(exportRow.status) !== filters.status) return false;
+    if (filters.role !== 'all' && textValue(exportRow.role) !== filters.role) return false;
+    if (filters.confirmed !== 'all' && textValue(exportRow.emailConfirmed) !== filters.confirmed) return false;
+
+    const created = toInputMonth(row.created_at);
+    if (filters.from && (!created || created < filters.from)) return false;
+    if (filters.to && (!created || created > filters.to)) return false;
+
+    return true;
+  }), [rows, filters]);
 
   const sortedRows = React.useMemo(() => [...filtered].sort((a, b) => {
     const direction = sort.direction === 'asc' ? 1 : -1;
@@ -485,7 +518,7 @@ export function UsuariosAdmin({ supabase, user }) {
 
   React.useEffect(() => {
     setPage(1);
-  }, [query, columnFilters, pageSize]);
+  }, [pageSize, filters.value, filters.status, filters.role, filters.confirmed, filters.from, filters.to]);
 
   const activeCount = rows.filter((row) => row.activo && !row.deleted_at).length;
   const inactiveCount = rows.filter((row) => !row.activo && !row.deleted_at).length;
@@ -571,6 +604,29 @@ function exportPdf() {
     win.document.close();
   }
 
+  function exportUserDetailPdf(row) {
+    notify('Descargando reporte', 'info');
+    const exportRow = rowToExport(row);
+    const htmlRows = visibleColumns.map((column) => `
+      <div class="item">
+        <span>${escapeHtml(column.label)}</span>
+        <strong>${escapeHtml(exportRow[column.key] || '-')}</strong>
+      </div>
+    `).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Detalle de usuario</title><style>
+      body{font-family:Arial,sans-serif;color:#0f172a;padding:28px;background:#f8fafc}
+      h1{margin:0 0 4px;font-size:22px}p{margin:0 0 22px;color:#64748b}
+      .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+      .item{background:#fff;border:1px solid #dbe5ee;border-radius:14px;padding:14px}
+      span{display:block;font-size:11px;text-transform:uppercase;font-weight:700;color:#64748b;margin-bottom:6px}
+      strong{font-size:15px}
+    </style></head><body><h1>FinTrack Pro - Detalle de usuario</h1><p>Generado: ${escapeHtml(new Date().toLocaleString('es-PE'))}</p><div class="grid">${htmlRows}</div><script>window.print()</script></body></html>`;
+    const win = window.open('', '_blank');
+    if (!win) return notify('El navegador bloqueó la ventana del reporte.');
+    win.document.write(html);
+    win.document.close();
+  }
+
   return (
     <section className="tailwind-page space-y-5">
       <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-slate-50 shadow-[0_22px_55px_rgba(15,23,42,0.10)]">
@@ -584,15 +640,6 @@ function exportPdf() {
                 <h3 className="text-xl font-black tracking-tight text-slate-950">Gestión de usuarios</h3>
                 <p className="text-sm font-medium text-slate-500">Administra usuarios, estados y permisos del sistema.</p>
               </div>
-            </div>
-            <div className="relative w-full xl:w-[460px]">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar usuario, correo o rol..."
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-              />
             </div>
           </div>
         </div>
@@ -624,6 +671,89 @@ function exportPdf() {
         </div>
 
         <div className="px-5 pb-5">
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <strong className="inline-flex items-center gap-2 text-sm font-black text-slate-900">
+                  <SlidersHorizontal size={16} />Filtros
+                </strong>
+                <p className="mt-1 text-xs font-semibold text-slate-500">Filtra usuarios desde este panel. Las columnas solo quedan para ordenar.</p>
+              </div>
+              <button type="button" className="border-0 bg-transparent p-0 text-xs font-black text-emerald-700 underline-offset-2 transition hover:text-emerald-900 hover:underline" onClick={clearFilters}>
+                Limpiar filtros
+              </button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+              <label className="grid gap-2 xl:col-span-2">
+                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Buscar</span>
+                <input
+                  type="search"
+                  value={filters.value}
+                  onChange={(event) => setFilters((current) => ({ ...current, value: event.target.value }))}
+                  placeholder="Buscar usuario, correo o rol..."
+                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Estado</span>
+                <select
+                  value={filters.status}
+                  onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}
+                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                >
+                  <option value="all">Todos</option>
+                  <option value="activo">Activo</option>
+                  <option value="inactivo">Inactivo</option>
+                  <option value="eliminado">Eliminado</option>
+                </select>
+              </label>
+              <label className="grid gap-2">
+                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Rol</span>
+                <select
+                  value={filters.role}
+                  onChange={(event) => setFilters((current) => ({ ...current, role: event.target.value }))}
+                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                >
+                  <option value="all">Todos</option>
+                  <option value="admin">Admin</option>
+                  <option value="user">User</option>
+                </select>
+              </label>
+              <label className="grid gap-2">
+                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Correo</span>
+                <select
+                  value={filters.confirmed}
+                  onChange={(event) => setFilters((current) => ({ ...current, confirmed: event.target.value }))}
+                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                >
+                  <option value="all">Todos</option>
+                  <option value="confirmado">Confirmado</option>
+                  <option value="pendiente">Pendiente</option>
+                  <option value="sin correo">Sin correo</option>
+                  <option value="sin dato">Sin dato</option>
+                </select>
+              </label>
+              <label className="grid gap-2">
+                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Desde mes</span>
+                <input
+                  type="month"
+                  value={filters.from}
+                  onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))}
+                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Hasta mes</span>
+                <input
+                  type="month"
+                  value={filters.to}
+                  onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))}
+                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                />
+              </label>
+            </div>
+          </div>
+
           <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="text-sm font-semibold text-slate-500">
               Mostrando {sortedRows.length ? ((safePage - 1) * pageSize) + 1 : 0}-{Math.min(safePage * pageSize, sortedRows.length)} de {sortedRows.length} usuario(s)
@@ -688,19 +818,6 @@ function exportPdf() {
                       ))}
                       <th className="border-b border-slate-100 px-4 py-3 text-right text-xs font-black uppercase tracking-wide text-slate-500">Acciones</th>
                     </tr>
-                    <tr>
-                      {visibleColumns.map((column) => (
-                        <th key={`filter-${column.key}`} className="border-b border-slate-100 bg-white px-4 py-2">
-                          <input
-                            value={columnFilters[column.key] || ''}
-                            onChange={(event) => updateColumnFilter(column.key, event.target.value)}
-                            placeholder={`Filtrar ${column.label.toLowerCase()}...`}
-                            className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
-                          />
-                        </th>
-                      ))}
-                      <th className="border-b border-slate-100 bg-white px-4 py-2" />
-                    </tr>
                   </thead>
                   <tbody>
                     {pageRows.map((row) => {
@@ -732,16 +849,20 @@ function exportPdf() {
                             </td>
                           ))}
                           <td className="px-4 py-3.5">
-                            {row.id === user.id ? (
-                              <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">Usuario actual</span>
-                            ) : (
-                              <div className="flex flex-wrap items-center justify-end gap-1.5 opacity-75 transition group-hover:opacity-100">
+                            <div className="flex flex-wrap items-center justify-end gap-1.5 opacity-75 transition group-hover:opacity-100">
+                              <button className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-500 transition hover:bg-blue-50 hover:text-blue-700" type="button" title="Ver detalle" onClick={() => openDetail(row)}><Eye size={14} /></button>
+                              <button className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-500 transition hover:bg-blue-50 hover:text-blue-700" type="button" title="Descargar detalle" onClick={() => exportUserDetailPdf(row)}><Download size={14} /></button>
+                              {row.id === user.id ? (
+                                <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">Usuario actual</span>
+                              ) : (
+                                <>
                                 <button className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-700" type="button" title="Editar" onClick={() => openEdit(row)}><Pencil size={14} /></button>
                                 <button className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-700" type="button" title="Permisos" onClick={() => openPermissions(row)}><KeyRound size={14} /></button>
                                 <button className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-500 transition hover:bg-amber-50 hover:text-amber-700" type="button" title={row.activo ? 'Desactivar' : 'Activar'} onClick={() => toggle(row)}><UserCheck size={14} /></button>
                                 <button className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-500 transition hover:bg-red-100 hover:text-red-700" type="button" title="Eliminar" onClick={() => remove(row)}><Trash2 size={14} /></button>
-                              </div>
-                            )}
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -785,18 +906,20 @@ function exportPdf() {
                         <span className="text-xs font-black uppercase tracking-wide text-slate-400">Correo</span>
                         <StatusBadge tone={getEmailConfirmation(row).tone}>{getEmailConfirmation(row).text}</StatusBadge>
                       </div>
-                      {row.id === user.id ? (
-                        <div className="p-3">
-                          <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">Usuario actual</span>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-4 gap-2 p-3">
+                      <div className="grid grid-cols-3 gap-2 p-3">
+                        <button className="grid min-h-12 place-items-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-700 shadow-sm transition active:scale-95" type="button" aria-label="Ver detalle" onClick={() => openDetail(row)}><Eye size={17} /></button>
+                        <button className="grid min-h-12 place-items-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-700 shadow-sm transition active:scale-95" type="button" aria-label="Descargar detalle" onClick={() => exportUserDetailPdf(row)}><Download size={17} /></button>
+                        {row.id === user.id ? (
+                          <span className="grid min-h-12 place-items-center rounded-2xl bg-slate-100 px-2 text-center text-xs font-black text-slate-500">Actual</span>
+                        ) : (
+                          <>
                           <button className="grid min-h-12 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition active:scale-95" type="button" aria-label="Editar" onClick={() => openEdit(row)}><Pencil size={17} /></button>
                           <button className="grid min-h-12 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition active:scale-95" type="button" aria-label="Permisos" onClick={() => openPermissions(row)}><KeyRound size={17} /></button>
                           <button className={`grid min-h-12 place-items-center rounded-2xl border shadow-sm transition active:scale-95 ${row.activo ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`} type="button" aria-label={row.activo ? 'Desactivar' : 'Activar'} onClick={() => toggle(row)}><UserCheck size={17} /></button>
                           <button className="grid min-h-12 place-items-center rounded-2xl border border-red-200 bg-red-50 text-red-600 shadow-sm transition active:scale-95" type="button" aria-label="Eliminar" onClick={() => remove(row)}><Trash2 size={17} /></button>
-                        </div>
-                      )}
+                          </>
+                        )}
+                      </div>
                     </article>
                   );
                 })}
@@ -819,6 +942,22 @@ function exportPdf() {
           ) : <EmptyUsers />}
         </div>
       </div>
+
+      <TailwindModal open={Boolean(detailUser)} title={`Detalle de ${detailUser ? userName(detailUser) : 'usuario'}`} onClose={() => setDetailUser(null)}>
+        {detailUser && (
+          <div className="grid gap-3 p-6 sm:grid-cols-2">
+            {visibleColumns.map((column) => {
+              const exportRow = rowToExport(detailUser);
+              return (
+                <div key={column.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <span className="block text-xs font-black uppercase tracking-wide text-slate-500">{column.label}</span>
+                  <strong className="mt-2 block break-words text-sm text-slate-900">{exportRow[column.key] || '-'}</strong>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </TailwindModal>
 
       <TailwindModal open={open} title="Editar usuario" onClose={() => setOpen(false)}>
         <form onSubmit={save}>

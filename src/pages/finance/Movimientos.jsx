@@ -12,7 +12,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
-import { Badge, Field, Modal, RowActions, SelectField, TableSection } from '../../components/ui';
+import { Button, Field, Modal, RowActions, SelectField, TableSection } from '../../components/ui';
 import { AttachmentManager } from '../../components/AttachmentManager';
 import { confirmAction, notify } from '../../services/feedback';
 import {
@@ -25,7 +25,7 @@ import {
   registrarMovimiento,
 } from '../../services/movimientos.service';
 import { listCategoryRules, suggestCategoryFromRules } from '../../services/smartCategories.service';
-import { calcEstado, dateFmt, money, month, today } from '../../utils/format';
+import { calcEstado, dateFmt, money, today } from '../../utils/format';
 import {
   MODULE_PERMISSIONS,
   PERMISSION_FIELDS,
@@ -51,6 +51,8 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
   const [editingId, setEditingId] = React.useState(null);
   const [form, setForm] = React.useState({ tipo: 'ingreso', concepto: '', tipo_movimiento_id: '', cuenta_id: '', monto: '', fecha: today() });
   const [categorySuggestion, setCategorySuggestion] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+  const [savingTipo, setSavingTipo] = React.useState(false);
   const load = React.useCallback(async () => {
     const [viewData, rulesResult] = await Promise.all([
       listMovimientosViewData(supabase, user.id),
@@ -110,6 +112,10 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
   }
   async function save(event) {
     event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    const wasEditing = Boolean(editingId);
+    try {
     const tipoSeleccionado = tipos.find((t) => t.id === form.tipo_movimiento_id);
     const payload = {
       p_tipo: form.tipo,
@@ -130,14 +136,20 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
     setForm({ tipo: 'ingreso', concepto: '', tipo_movimiento_id: '', cuenta_id: '', monto: '', fecha: today() });
     setEditingId(null);
     setOpen(false);
-    notify(editingId ? 'Movimiento actualizado correctamente.' : 'Movimiento registrado correctamente.', 'success');
-    load();
+    notify(wasEditing ? 'Movimiento actualizado correctamente.' : 'Movimiento registrado correctamente.', 'success');
+    await load();
+    } finally {
+      setSaving(false);
+    }
   }
   async function saveTipo(event) {
     event.preventDefault();
     if (tipoEditingId && !can('edit')) return notify('No tienes permiso para editar tipos.');
     if (!tipoEditingId && !can('create')) return notify('No tienes permiso para crear tipos.');
     if (!tipoForm.nombre) return;
+    if (savingTipo) return;
+    setSavingTipo(true);
+    try {
     const { error } = tipoEditingId
       ? await actualizarTipoMovimiento(supabase, user.id, tipoEditingId, tipoForm)
       : await crearTipoMovimiento(supabase, user.id, tipoForm);
@@ -148,7 +160,10 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
     setTipoForm({ tipo: 'ingreso', nombre: '' });
     setTipoEditingId(null);
     notify(tipoEditingId ? 'Tipo actualizado correctamente.' : 'Tipo creado correctamente.', 'success');
-    load();
+    await load();
+    } finally {
+      setSavingTipo(false);
+    }
   }
   function editTipo(tipo) {
     setTipoEditingId(tipo.id);
@@ -185,7 +200,7 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
     <>
       <TableSection
         title="Historial de movimientos"
-        action={<div className="table-actions">{(can('create') || can('edit') || can('delete')) && <button className="btn" onClick={() => setTiposOpen(true)}><Settings size={16} />Tipos</button>}{can('create') && <button className="btn btn-primary" onClick={openCreate}><Plus size={16} />Nuevo movimiento</button>}</div>}
+        action={<div className="table-actions">{(can('create') || can('edit') || can('delete')) && <Button onClick={() => setTiposOpen(true)}><Settings size={16} />Tipos</Button>}{can('create') && <Button variant="primary" onClick={openCreate}><Plus size={16} />Nuevo movimiento</Button>}</div>}
         columns={['Fecha', 'Tipo', 'Concepto', 'Tipo de movimiento', 'Cuenta', 'Monto']}
         rows={movimientos.map((m) => [dateFmt(m.fecha), badge(m.tipo), m.concepto, m.tipos_movimiento?.nombre || m.categoria || '-', m.cuentas ? `${m.cuentas.banco} - ${m.cuentas.tipo || ''}` : '-', money(m.monto), <RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => openEdit(m)} onDelete={() => remove(m)} />])}
       />
@@ -225,7 +240,7 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
               />
             )}
           </div>
-          <div className="modal-footer"><button type="button" className="btn" onClick={() => setOpen(false)}>Cancelar</button><button className="btn btn-primary"><Check size={16} />{editingId ? 'Actualizar' : 'Guardar'}</button></div>
+          <div className="modal-footer"><Button type="button" onClick={() => setOpen(false)} disabled={saving}>Cancelar</Button><Button variant="primary" type="submit" loading={saving} loadingLabel={editingId ? 'Actualizando...' : 'Guardando...'}><Check size={16} />{editingId ? 'Actualizar' : 'Guardar'}</Button></div>
         </form>
       </Modal>
       <Modal open={tiposOpen} title="Mantenimiento de tipos" onClose={() => setTiposOpen(false)}>
@@ -239,7 +254,7 @@ export function Movimientos({ supabase, user, isAdmin, can = () => true }) {
               {tipos.map((t) => <div key={t.id} className="list-row type-row"><span>{badge(t.tipo)} {t.nombre}</span><RowActions canEdit={can('edit')} canDelete={can('delete')} onEdit={() => editTipo(t)} onDelete={() => removeTipo(t)} /></div>)}
             </div>
           </div>
-          <div className="modal-footer"><button type="button" className="btn" onClick={() => setTiposOpen(false)}>Cerrar</button><button className="btn btn-primary">{tipoEditingId ? <Check size={16} /> : <Plus size={16} />}{tipoEditingId ? 'Actualizar' : 'Agregar'}</button></div>
+          <div className="modal-footer"><Button type="button" onClick={() => setTiposOpen(false)} disabled={savingTipo}>Cerrar</Button><Button variant="primary" type="submit" loading={savingTipo} loadingLabel={tipoEditingId ? 'Actualizando...' : 'Guardando...'}>{tipoEditingId ? <Check size={16} /> : <Plus size={16} />}{tipoEditingId ? 'Actualizar' : 'Agregar'}</Button></div>
         </form>
       </Modal>
     </>

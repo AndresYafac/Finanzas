@@ -1,5 +1,5 @@
 import React from 'react';
-import { Columns3, Download, Eye, FileSpreadsheet, FileText, Pencil, Search, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Columns3, Download, Eye, FileSpreadsheet, FileText, Pencil, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { getCompanyConfig } from '../config/visualConfig';
 import { notify } from '../services/feedback';
 import { money } from '../utils/format';
@@ -41,7 +41,18 @@ export function AuthCard({ title, children }) {
   );
 }
 
-export function Button({ children, variant = 'default', size = 'default', iconOnly = false, className = '', type = 'button', ...props }) {
+export function Button({
+  children,
+  variant = 'default',
+  size = 'default',
+  iconOnly = false,
+  className = '',
+  type = 'button',
+  loading = false,
+  loadingLabel,
+  disabled,
+  ...props
+}) {
   const classes = [
     'btn',
     variant === 'primary' ? 'btn-primary' : '',
@@ -50,7 +61,12 @@ export function Button({ children, variant = 'default', size = 'default', iconOn
     iconOnly ? 'btn-icon' : '',
     className,
   ].filter(Boolean).join(' ');
-  return <button type={type} className={classes} {...props}>{children}</button>;
+  return (
+    <button type={type} className={classes} disabled={disabled || loading} aria-busy={loading ? 'true' : undefined} {...props}>
+      {loading ? <span className="btn-spinner" aria-hidden="true" /> : null}
+      {loading ? (loadingLabel || children) : children}
+    </button>
+  );
 }
 
 export function Badge({ children, tone = 'gray', className = '' }) {
@@ -267,6 +283,31 @@ function compareCells(left, right, direction) {
   return String(a.value).localeCompare(String(b.value), 'es-PE', { numeric: true, sensitivity: 'base' }) * multiplier;
 }
 
+function isDateColumn(column = '') {
+  return /fecha|vencimiento|registro|created/i.test(String(column));
+}
+
+function toInputMonth(value) {
+  const text = cellToText(value).trim();
+  if (!text) return '';
+  const monthMatch = text.match(/^(\d{4})-(\d{2})/);
+  if (monthMatch) return `${monthMatch[1]}-${monthMatch[2]}`;
+  const peMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (peMatch) {
+    const [, , monthValue, year] = peMatch;
+    return `${year}-${String(monthValue).padStart(2, '0')}`;
+  }
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 7);
+}
+
+const EMPTY_TABLE_FILTERS = {
+  search: '',
+  from: '',
+  to: '',
+};
+
 async function exportRowsToExcel(title, columns, rows) {
   notify('Descargando reporte...', 'success');
   const XLSX = await import('xlsx-js-style');
@@ -378,43 +419,56 @@ function getMobileRowActions(row, dataColumnCount) {
   return row.slice(dataColumnCount).find((cell) => React.isValidElement(cell)) || null;
 }
 
-export function TableSection({ title, columns, rows, search, setSearch, action, pageSize = 10, onExport, enableColumnFilters = true, enableSorting = true }) {
+export function TableSection({ title, columns, rows, search, setSearch, action, pageSize = 10, onExport, enableSorting = true }) {
   const [page, setPage] = React.useState(1);
   const [limit, setLimit] = React.useState(pageSize);
   const [contextMenu, setContextMenu] = React.useState(null);
   const [internalSearch, setInternalSearch] = React.useState('');
-  const [columnFilters, setColumnFilters] = React.useState({});
   const [sortState, setSortState] = React.useState({ index: null, direction: 'asc' });
   const [showOptions, setShowOptions] = React.useState(false);
   const [tableDensity, setTableDensity] = React.useState('comfortable');
   const [hiddenColumns, setHiddenColumns] = React.useState({});
   const [selectedRows, setSelectedRows] = React.useState(new Set());
   const [detailRow, setDetailRow] = React.useState(null);
-  const currentSearch = setSearch ? (search || '') : internalSearch;
-  const updateSearch = setSearch || setInternalSearch;
+  const [activeMobileRowKey, setActiveMobileRowKey] = React.useState(null);
+  const [filters, setFilters] = React.useState(EMPTY_TABLE_FILTERS);
+  const currentSearch = filters.search || (setSearch ? (search || '') : internalSearch);
+  const updateSearch = (value) => {
+    setFilters((current) => ({ ...current, search: value }));
+    if (setSearch) setSearch(value);
+    else setInternalSearch(value);
+  };
   const normalizedSearch = currentSearch.trim().toLowerCase();
   const columnCount = Math.max(columns.length, ...rows.map((row) => row.length), 0);
   const dataColumnCount = columns.length;
   const visibleDataIndexes = columns.map((_, index) => index).filter((index) => !hiddenColumns[index]);
+  const monthFilterIndex = columns.findIndex((column) => isDateColumn(column));
+  const hasMonthFilter = monthFilterIndex >= 0;
   const hasActionsColumn = columnCount > dataColumnCount;
   const visibleColumnDefs = [
     ...visibleDataIndexes.map((index) => ({ label: columns[index], originalIndex: index, actions: false })),
     ...(hasActionsColumn ? [{ label: 'Acciones', originalIndex: dataColumnCount, actions: true }] : []),
   ];
-  const normalizedColumnFilters = Object.fromEntries(
-    Object.entries(columnFilters).map(([key, value]) => [key, String(value || '').trim().toLowerCase()]).filter(([, value]) => value),
-  );
   const filteredRows = rows
-    .filter((row) => (
-      normalizedSearch
-        ? row.map(cellToText).join(' ').toLowerCase().includes(normalizedSearch)
-        : true
-    ))
-    .filter((row) => Object.entries(normalizedColumnFilters).every(([key, value]) => cellToText(row[Number(key)]).toLowerCase().includes(value)));
+    .filter((row) => {
+      const rowText = row.map(cellToText).join(' ').toLowerCase();
+      if (normalizedSearch && !rowText.includes(normalizedSearch)) return false;
+
+      if ((filters.from || filters.to) && hasMonthFilter) {
+        const rowMonth = toInputMonth(row[monthFilterIndex]);
+        const from = filters.from && filters.to && filters.from > filters.to ? filters.to : filters.from;
+        const to = filters.from && filters.to && filters.from > filters.to ? filters.from : filters.to;
+        if (!rowMonth) return false;
+        if (from && rowMonth < from) return false;
+        if (to && rowMonth > to) return false;
+      }
+
+      return true;
+    });
   const sortedRows = sortState.index === null
     ? filteredRows
     : [...filteredRows].sort((a, b) => compareCells(a[sortState.index], b[sortState.index], sortState.direction));
-  React.useEffect(() => setPage(1), [rows.length, currentSearch, limit, JSON.stringify(columnFilters), JSON.stringify(hiddenColumns), sortState.index, sortState.direction]);
+  React.useEffect(() => setPage(1), [rows.length, currentSearch, limit, JSON.stringify(hiddenColumns), sortState.index, sortState.direction, filters.from, filters.to]);
   React.useEffect(() => {
     const close = () => {
       setContextMenu(null);
@@ -445,6 +499,7 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
   ].filter(([, value]) => value > 0);
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / limit));
   const currentPage = Math.min(page, totalPages);
+  React.useEffect(() => setActiveMobileRowKey(null), [currentPage, currentSearch, limit, JSON.stringify(hiddenColumns), filters.from, filters.to]);
   const start = (currentPage - 1) * limit;
   const visibleRows = sortedRows.slice(start, start + limit);
   const visibleRowKeys = visibleRows.map(getRowKey);
@@ -472,9 +527,6 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
       return next;
     });
   }
-  function updateColumnFilter(index, value) {
-    setColumnFilters((current) => ({ ...current, [index]: value }));
-  }
   function toggleSort(index) {
     if (!enableSorting || index >= dataColumnCount) return;
     setSortState((current) => {
@@ -493,10 +545,14 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
   }
   function resetTableOptions() {
     setHiddenColumns({});
-    setColumnFilters({});
     setSortState({ index: null, direction: 'asc' });
     setTableDensity('comfortable');
     setSelectedRows(new Set());
+  }
+  function clearTableFilters() {
+    setFilters(EMPTY_TABLE_FILTERS);
+    if (setSearch) setSearch('');
+    else setInternalSearch('');
   }
   function getRowExportValues(row) {
     return exportColumnDefs.map((column) => row[column.originalIndex]);
@@ -507,8 +563,11 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
   function downloadRow(row) {
     exportRowsToPdf(`${title} - detalle`, exportColumns, [getRowExportValues(row)]);
   }
+  function isRowActionsElement(cell) {
+    return React.isValidElement(cell) && (cell.type === RowActions || cell.type?.name === RowActions.name);
+  }
   function enhanceActionCell(cell, row) {
-    if (!React.isValidElement(cell) || cell.type !== RowActions) return cell;
+    if (!isRowActionsElement(cell)) return cell;
     return React.cloneElement(cell, {
       onView: cell.props.onView || (() => openRowDetail(row)),
       onDownload: cell.props.onDownload || (() => downloadRow(row)),
@@ -518,15 +577,7 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
   }
   return (
     <>
-      <div className="action-bar">
-        <div>
-          <div className="search-wrap">
-            <Search size={16} />
-            <input className="search-input" value={currentSearch} onChange={(e) => updateSearch(e.target.value)} placeholder={`Buscar ${title.toLowerCase()}...`} />
-          </div>
-        </div>
-        {action}
-      </div>
+      {action && <div className="action-bar action-bar-end">{action}</div>}
       <Card
         className={detailRow ? 'table-detail-open' : ''}
         title={title}
@@ -567,6 +618,46 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
           </div>
         )}
       >
+        <div className="table-external-filters">
+          <div className="table-external-filters-head">
+            <div>
+              <strong><SlidersHorizontal size={16} />Filtros</strong>
+              <span>Busca por texto y filtra por rango de mes.</span>
+            </div>
+            <Button size="sm" onClick={clearTableFilters}>Limpiar filtros</Button>
+          </div>
+          <div className="table-external-filters-grid">
+            <label>
+              Buscar
+              <input
+                type="search"
+                value={currentSearch}
+                onChange={(event) => updateSearch(event.target.value)}
+                placeholder={`Buscar ${title.toLowerCase()}...`}
+              />
+            </label>
+            {hasMonthFilter && (
+              <>
+                <label>
+                  Desde mes
+                  <input
+                    type="month"
+                    value={filters.from}
+                    onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  Hasta mes
+                  <input
+                    type="month"
+                    value={filters.to}
+                    onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+        </div>
         <div className="table-summary-grid">
           <div className="table-summary-card">
             <span>Total registros</span>
@@ -619,29 +710,13 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
                       {sortable ? (
                         <button type="button" className={`sort-button ${activeSort ? 'active' : ''}`} onClick={() => toggleSort(column.originalIndex)}>
                           <span>{column.label}</span>
-                          <b>{activeSort ? (sortState.direction === 'asc' ? 'ASC' : 'DESC') : 'ORD'}</b>
+                          <b aria-hidden="true">{activeSort ? (sortState.direction === 'asc' ? '↑' : '↓') : '↕'}</b>
                         </button>
                       ) : column.label}
                     </th>
                   );
                 })}
               </tr>
-              {enableColumnFilters && (
-                <tr className="table-filter-row">
-                  <th />
-                  {visibleColumnDefs.map((column) => (
-                    <th key={`filter-${column.label}-${column.originalIndex}`}>
-                      {!column.actions ? (
-                        <input
-                          value={columnFilters[column.originalIndex] || ''}
-                          onChange={(event) => updateColumnFilter(column.originalIndex, event.target.value)}
-                          placeholder={`Filtrar ${String(column.label).toLowerCase()}...`}
-                        />
-                      ) : null}
-                    </th>
-                  ))}
-                </tr>
-              )}
             </thead>
             <tbody>
               {sortedRows.length ? visibleRows.map((row, i) => (
@@ -661,12 +736,14 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
                     </td>
                   ))}
                 </tr>
-              )) : <tr><td colSpan={(visibleColumnDefs.length || columns.length) + 1}><EmptyState>{normalizedSearch || Object.keys(normalizedColumnFilters).length ? 'Sin resultados para el filtro aplicado' : 'Sin datos'}</EmptyState></td></tr>}
+              )) : <tr><td colSpan={(visibleColumnDefs.length || columns.length) + 1}><EmptyState>{normalizedSearch ? 'Sin resultados para el filtro aplicado' : 'Sin datos'}</EmptyState></td></tr>}
             </tbody>
           </table>
         </div>
         <div className="mobile-record-list">
           {sortedRows.length ? visibleRows.map((row, rowIndex) => {
+            const rowKey = getRowKey(row);
+            const isActive = activeMobileRowKey === rowKey;
             const amountIndex = findAmountIndex(columns, row);
             const actionsCell = enhanceActionCell(getMobileRowActions(row, dataColumnCount), row);
             const primary = cellToText(row[0]) || 'Registro';
@@ -674,29 +751,61 @@ export function TableSection({ title, columns, rows, search, setSearch, action, 
             const amount = amountIndex >= 0 ? row[amountIndex] : null;
             const detailIndexes = visibleDataIndexes.filter((index) => index !== 0 && index !== 1 && index !== amountIndex);
             return (
-              <article className="mobile-record-card" key={`mobile-${start}-${rowIndex}`}>
-                <div className="mobile-record-head">
-                  <input type="checkbox" checked={selectedRows.has(getRowKey(row))} onChange={() => toggleRowSelection(row)} aria-label="Seleccionar registro" />
-                  <div>
-                    <strong>{primary}</strong>
-                    {secondary && <span>{secondary}</span>}
+              <article
+                className={`mobile-record-card ${isActive ? 'is-active' : ''}`}
+                key={`mobile-${start}-${rowIndex}`}
+                onClick={() => setActiveMobileRowKey((current) => (current === rowKey ? null : rowKey))}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setActiveMobileRowKey((current) => (current === rowKey ? null : rowKey));
+                  }
+                }}
+              >
+                <div className="mobile-record-content">
+                  <div className="mobile-record-head">
+                    <input
+                      type="checkbox"
+                      checked={selectedRows.has(rowKey)}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={() => toggleRowSelection(row)}
+                      aria-label="Seleccionar registro"
+                    />
+                    <div>
+                      <strong>{primary}</strong>
+                      {secondary && <span>{secondary}</span>}
+                    </div>
+                    {amount && <b>{amount}</b>}
                   </div>
-                  {amount && <b>{amount}</b>}
+                  {detailIndexes.length > 0 && (
+                    <div className="mobile-record-details">
+                      {detailIndexes.map((index) => (
+                        <div key={`${columns[index]}-${index}`}>
+                          <span>{columns[index]}</span>
+                          <strong>{row[index]}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {detailIndexes.length > 0 && (
-                  <div className="mobile-record-details">
-                    {detailIndexes.map((index) => (
-                      <div key={`${columns[index]}-${index}`}>
-                        <span>{columns[index]}</span>
-                        <strong>{row[index]}</strong>
-                      </div>
-                    ))}
+                {actionsCell && isActive && (
+                  <div
+                    className="mobile-record-actions"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setActiveMobileRowKey(null);
+                    }}
+                  >
+                    <div className="mobile-record-actions-inner" onClick={(event) => event.stopPropagation()}>
+                      {actionsCell}
+                    </div>
                   </div>
                 )}
-                {actionsCell && <div className="mobile-record-actions">{actionsCell}</div>}
               </article>
             );
-          }) : <EmptyState>{normalizedSearch || Object.keys(normalizedColumnFilters).length ? 'Sin resultados para el filtro aplicado' : 'Sin datos'}</EmptyState>}
+          }) : <EmptyState>{normalizedSearch ? 'Sin resultados para el filtro aplicado' : 'Sin datos'}</EmptyState>}
         </div>
         {contextMenu && (
           <div className="table-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>

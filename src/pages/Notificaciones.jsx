@@ -23,15 +23,54 @@ function notifyNotificationsChanged() {
   window.dispatchEvent(new Event('fintrack:notifications-changed'));
 }
 
+const NOTIFICATION_PAGE_SIZE = 5;
+
+function PaginationControls({ page, total, pageSize, onPage }) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (total <= pageSize) return null;
+
+  return (
+    <div className="notification-pagination">
+      <span>Pagina {page} de {totalPages}</span>
+      <div>
+        <Button size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>Anterior</Button>
+        <Button size="sm" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>Siguiente</Button>
+      </div>
+    </div>
+  );
+}
+
 export function Notificaciones({ supabase, user, isAdmin = false }) {
   const [devices, setDevices] = React.useState([]);
   const [adminDevices, setAdminDevices] = React.useState([]);
   const [adminSummary, setAdminSummary] = React.useState({ users: 0, registered: 0, not_registered: 0, active_devices: 0 });
   const [internalNotifications, setInternalNotifications] = React.useState([]);
+  const [internalPage, setInternalPage] = React.useState(1);
+  const [adminDevicesPage, setAdminDevicesPage] = React.useState(1);
   const [status, setStatus] = React.useState('');
   const [permission, setPermission] = React.useState('verificando');
   const supported = isPushSupported();
   const nativeSupported = isNativePushSupported();
+  const internalTotalPages = Math.max(1, Math.ceil(internalNotifications.length / NOTIFICATION_PAGE_SIZE));
+  const adminDevicesTotalPages = Math.max(1, Math.ceil(adminDevices.length / NOTIFICATION_PAGE_SIZE));
+  const currentInternalPage = Math.min(internalPage, internalTotalPages);
+  const currentAdminDevicesPage = Math.min(adminDevicesPage, adminDevicesTotalPages);
+  const visibleInternalNotifications = internalNotifications.slice(
+    (currentInternalPage - 1) * NOTIFICATION_PAGE_SIZE,
+    currentInternalPage * NOTIFICATION_PAGE_SIZE,
+  );
+  const visibleAdminDevices = adminDevices.slice(
+    (currentAdminDevicesPage - 1) * NOTIFICATION_PAGE_SIZE,
+    currentAdminDevicesPage * NOTIFICATION_PAGE_SIZE,
+  );
+
+  React.useEffect(() => {
+    setInternalPage((page) => Math.min(page, internalTotalPages));
+  }, [internalTotalPages]);
+
+  React.useEffect(() => {
+    setAdminDevicesPage((page) => Math.min(page, adminDevicesTotalPages));
+  }, [adminDevicesTotalPages]);
 
   async function load() {
     await syncAutomaticNotifications(supabase, user.id);
@@ -151,7 +190,7 @@ export function Notificaciones({ supabase, user, isAdmin = false }) {
             <Button onClick={load}>Actualizar</Button>
           </FormActions>
           <div className="notification-internal-list">
-            {internalNotifications.length ? internalNotifications.map((item) => (
+            {internalNotifications.length ? visibleInternalNotifications.map((item) => (
               <div className={`notification-internal-item ${item.leida ? 'read' : ''}`} key={item.id}>
                 <div>
                   <Badge tone={item.tipo === 'danger' ? 'red' : item.tipo === 'warning' ? 'yellow' : 'gray'}>{item.tipo}</Badge>
@@ -166,6 +205,12 @@ export function Notificaciones({ supabase, user, isAdmin = false }) {
               </div>
             )) : <p className="muted">Sin alertas internas registradas.</p>}
           </div>
+          <PaginationControls
+            page={currentInternalPage}
+            total={internalNotifications.length}
+            pageSize={NOTIFICATION_PAGE_SIZE}
+            onPage={setInternalPage}
+          />
           {status && <div className={`connection-status ${status.includes('correctamente') || status.includes('nueva') ? 'success' : ''}`}>{status}</div>}
         </div>
       </Card>
@@ -218,7 +263,7 @@ export function Notificaciones({ supabase, user, isAdmin = false }) {
 
             <section className="notification-devices">
               <h4>Usuarios y estado de registro</h4>
-              {adminDevices.length ? adminDevices.map((device) => (
+              {adminDevices.length ? visibleAdminDevices.map((device) => (
                 <div className={`notification-device admin-device ${device.registered ? 'registered' : 'pending'}`} key={device.user_id}>
                   {device.registered ? <Smartphone size={18} /> : <Users size={18} />}
                   <div>
@@ -229,6 +274,12 @@ export function Notificaciones({ supabase, user, isAdmin = false }) {
                   <Badge tone={device.registered ? 'green' : 'yellow'}>{device.registered ? 'Registrado' : 'Pendiente'}</Badge>
                 </div>
               )) : <p className="muted">Aun no hay usuarios para revisar.</p>}
+              <PaginationControls
+                page={currentAdminDevicesPage}
+                total={adminDevices.length}
+                pageSize={NOTIFICATION_PAGE_SIZE}
+                onPage={setAdminDevicesPage}
+              />
             </section>
 
             <FormActions>

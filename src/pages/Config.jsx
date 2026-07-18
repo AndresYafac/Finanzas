@@ -4,6 +4,7 @@ import { createStoredClient, createSupabaseClient } from '../config/supabase';
 import { COMPANY_CONFIG_KEY, DEFAULT_COMPANY_CONFIG, getCompanyConfig } from '../config/visualConfig';
 import { Button, Card, Field, FormActions } from '../components/ui';
 import { getEmpresaConfig, getEmpresaLogoUrl, saveEmpresaConfig, testSupabaseConnection, uploadEmpresaLogo } from '../services/config.service';
+import { notify } from '../services/feedback';
 
 export function Config({ onReady, compact = false }) {
   const [url, setUrl] = React.useState(localStorage.getItem('sb_url') || import.meta.env.VITE_SUPABASE_URL || '');
@@ -59,20 +60,23 @@ export function Config({ onReady, compact = false }) {
     setLoading(true);
     const cleanUrl = url.trim().replace(/\/+$/, '');
     if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(cleanUrl)) {
-      setStatus('La URL debe tener formato https://proyecto.supabase.co');
+      setStatus('');
+      notify('La URL debe tener formato https://proyecto.supabase.co', 'warning');
       setLoading(false);
       return;
     }
     const client = createSupabaseClient(cleanUrl, key.trim());
     const { error } = await testSupabaseConnection(client);
     if (error && !/profiles|schema cache|relation/i.test(error.message) && error.code !== '42501') {
-      setStatus(error.message);
+      setStatus('');
+      notify(error.message);
       setLoading(false);
       return;
     }
     localStorage.setItem('sb_url', cleanUrl);
     localStorage.setItem('sb_key', key.trim());
-    setStatus('Conexion guardada correctamente.');
+    setStatus('');
+    notify('Conexion guardada correctamente.', 'success');
     onReady(client);
     setLoading(false);
   }
@@ -89,7 +93,8 @@ export function Config({ onReady, compact = false }) {
         await saveEmpresaConfig(client, adminId, company);
       }
     }
-    setStatus('Datos de empresa guardados correctamente.');
+    setStatus('');
+    notify('Datos de empresa guardados correctamente.', 'success');
   }
 
   async function uploadLogo(event) {
@@ -99,17 +104,20 @@ export function Config({ onReady, compact = false }) {
     setLogoLoading(true);
     const client = createStoredClient();
     if (!client) {
-      setStatus('Configura Supabase antes de subir el logo.');
+      setStatus('');
+      notify('Configura Supabase antes de subir el logo.', 'warning');
       setLogoLoading(false);
       return;
     }
     if (!file.type.startsWith('image/')) {
-      setStatus('Selecciona una imagen valida.');
+      setStatus('');
+      notify('Selecciona una imagen valida.', 'warning');
       setLogoLoading(false);
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      setStatus('El logo no debe superar 2 MB.');
+      setStatus('');
+      notify('El logo no debe superar 2 MB.', 'warning');
       setLogoLoading(false);
       return;
     }
@@ -117,7 +125,8 @@ export function Config({ onReady, compact = false }) {
     const { data: sessionData } = await client.auth.getSession();
     const adminId = sessionData.session?.user?.id;
     if (!adminId) {
-      setStatus('Inicia sesion para subir el logo.');
+      setStatus('');
+      notify('Inicia sesion para subir el logo.', 'warning');
       setLogoLoading(false);
       return;
     }
@@ -126,7 +135,8 @@ export function Config({ onReady, compact = false }) {
     const path = `${adminId}/logo-${Date.now()}.${ext}`;
     const { error } = await uploadEmpresaLogo(client, path, file);
     if (error) {
-      setStatus(error.message);
+      setStatus('');
+      notify(error.message);
       setLogoLoading(false);
       return;
     }
@@ -136,7 +146,8 @@ export function Config({ onReady, compact = false }) {
     setCompany(nextCompany);
     localStorage.setItem(COMPANY_CONFIG_KEY, JSON.stringify(companyStoragePayload(nextCompany)));
     window.dispatchEvent(new Event('fintrack_company_config'));
-    setStatus('Logo subido. Guarda los datos de empresa para conservarlo.');
+    setStatus('');
+    notify('Logo subido. Guarda los datos de empresa para conservarlo.', 'success');
     setLogoLoading(false);
     event.target.value = '';
   }

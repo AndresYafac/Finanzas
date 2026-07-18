@@ -27,11 +27,22 @@ function clearLoginState(email) {
 
 export function friendlyAuthError(error) {
   const message = error?.message || '';
+  if (/correo ya est[aá] registrado|email.*registered|user already registered|already registered|email_exists/i.test(message)) return 'Este correo ya está registrado. Inicia sesión o usa recuperar contraseña.';
   if (/email not confirmed/i.test(message)) return 'Debes confirmar tu correo antes de ingresar.';
   if (/rate limit|too many|429/i.test(message)) return 'Demasiados intentos. Espera unos minutos antes de volver a intentar.';
   if (/invalid login credentials|invalid credentials/i.test(message)) return 'Correo o contraseña incorrectos, o la cuenta ya no existe.';
   if (/network|fetch/i.test(message)) return 'No se pudo conectar. Revisa tu conexión a internet.';
   return message || 'No se pudo completar la autenticación.';
+}
+
+export async function checkEmailRegistered({ supabase, email }) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return { exists: false, error: null };
+
+  const { data, error } = await supabase.rpc('auth_email_exists', { p_email: normalized });
+  if (error) return { exists: false, error };
+
+  return { exists: Boolean(data), error: null };
 }
 
 export async function signInWithPassword({ supabase, email, password, remember }) {
@@ -62,11 +73,23 @@ export async function signInWithPassword({ supabase, email, password, remember }
 }
 
 export async function signUpUser({ supabase, email, password, nombre, apellido }) {
-  const { error } = await supabase.auth.signUp({
-    email: normalizeEmail(email),
+  const normalizedEmail = normalizeEmail(email);
+  const emailCheck = await checkEmailRegistered({ supabase, email: normalizedEmail });
+
+  if (emailCheck.exists) {
+    return { error: { code: 'email_exists', message: 'Este correo ya está registrado.' } };
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email: normalizedEmail,
     password,
     options: { data: { nombre, apellido }, emailRedirectTo: getAuthRedirectUrl() },
   });
+
+  if (!error && data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return { error: { code: 'email_exists', message: 'Este correo ya está registrado.' } };
+  }
+
   return { error };
 }
 

@@ -1,10 +1,41 @@
+import Swal from 'sweetalert2';
+import 'sweetalert2/dist/sweetalert2.min.css';
+
 let notifyHandler = null;
 let confirmHandler = null;
 let busyHandler = null;
 let busyCount = 0;
 
+const toast = Swal.mixin({
+  toast: true,
+  position: 'top-end',
+  showConfirmButton: false,
+  timer: 3600,
+  timerProgressBar: true,
+  customClass: {
+    popup: 'fintrack-swal-toast',
+    title: 'fintrack-swal-title',
+    timerProgressBar: 'fintrack-swal-progress',
+  },
+  didOpen: (popup) => {
+    popup.addEventListener('mouseenter', Swal.stopTimer);
+    popup.addEventListener('mouseleave', Swal.resumeTimer);
+  },
+});
+
+function mapIcon(type) {
+  if (type === 'success' || type === 'warning' || type === 'info' || type === 'question') return type;
+  return 'error';
+}
+
 export function notify(message, type = 'error') {
-  if (notifyHandler) notifyHandler({ message, type });
+  const text = String(message || '').trim();
+  if (!text) return;
+  if (typeof window !== 'undefined') {
+    toast.fire({ icon: mapIcon(type), title: text });
+    return;
+  }
+  if (notifyHandler) notifyHandler({ message: text, type });
 }
 
 export function confirmAction(message) {

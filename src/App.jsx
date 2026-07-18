@@ -121,7 +121,59 @@ async function handleNativeAuthUrl(supabase, url) {
   }
 }
 
+function useGlobalButtonLoading() {
+  React.useEffect(() => {
+    const actionPattern = /guardar|actualizar|registrar|crear|agregar|transferir|cerrar caja|guardar cierre|editar|activar|desactivar|eliminar|permisos/i;
+
+    function hasManagedLoading(button) {
+      return (
+        button.querySelector('.btn-spinner') ||
+        button.dataset.loadingManaged === 'true' ||
+        button.getAttribute('data-loading') === 'true'
+      );
+    }
+
+    function shouldAnimate(button) {
+      if (!button || button.closest('[data-no-global-loading="true"]')) return false;
+      const label = `${button.textContent || ''} ${button.title || ''} ${button.getAttribute('aria-label') || ''}`.trim();
+      return actionPattern.test(label);
+    }
+
+    function markLoading(button) {
+      if (!button || button.disabled || button.getAttribute('aria-busy') === 'true' || hasManagedLoading(button)) return;
+      button.classList.add('btn-loading');
+      button.setAttribute('aria-busy', 'true');
+      window.setTimeout(() => {
+        button.classList.remove('btn-loading');
+        if (!hasManagedLoading(button)) button.removeAttribute('aria-busy');
+      }, 1200);
+    }
+
+    function handleSubmit(event) {
+      const button = event.submitter;
+      if (!button?.matches?.('button') || !shouldAnimate(button)) return;
+      if (event.target?.checkValidity && !event.target.checkValidity()) return;
+      markLoading(button);
+    }
+
+    function handleClick(event) {
+      const button = event.target?.closest?.('button');
+      if (!button || button.type === 'submit') return;
+      if (!shouldAnimate(button)) return;
+      markLoading(button);
+    }
+
+    document.addEventListener('submit', handleSubmit, true);
+    document.addEventListener('click', handleClick, true);
+    return () => {
+      document.removeEventListener('submit', handleSubmit, true);
+      document.removeEventListener('click', handleClick, true);
+    };
+  }, []);
+}
+
 export function App() {
+  useGlobalButtonLoading();
   const [supabase, setSupabase] = React.useState(createStoredClient);
   const [session, setSession] = React.useState(null);
   const [authReady, setAuthReady] = React.useState(false);

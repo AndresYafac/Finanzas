@@ -282,13 +282,51 @@
   }
 
   .mobile-record-card {
-    display: grid;
-    gap: 12px;
+    position: relative;
+    display: block;
+    overflow: hidden;
     padding: 14px;
     border: 1px solid var(--border);
     border-radius: 18px;
     background: var(--card);
     box-shadow: 0 12px 26px rgba(15, 23, 42, .08);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    touch-action: manipulation;
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background .18s ease;
+  }
+
+  .mobile-record-card:focus,
+  .mobile-record-card:active {
+    outline: none;
+  }
+
+  .mobile-record-card.is-active {
+    border-color: rgba(29, 158, 117, .55);
+    background: var(--card);
+    box-shadow: 0 16px 34px rgba(15, 23, 42, .14);
+    transform: translateY(-1px);
+  }
+
+  .mobile-record-card.is-active::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: rgba(15, 23, 42, .36);
+    backdrop-filter: saturate(110%);
+    pointer-events: none;
+  }
+
+  .mobile-record-content {
+    display: grid;
+    gap: 12px;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+
+  .mobile-record-card.is-active .mobile-record-content {
+    opacity: .55;
   }
 
   .mobile-record-head {
@@ -359,10 +397,23 @@
   }
 
   .mobile-record-actions {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
     display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding-top: 2px;
+    align-content: center;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: transparent;
+    border: 0;
+  }
+
+  .mobile-record-actions-inner {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
   }
 
   .detail-grid {
