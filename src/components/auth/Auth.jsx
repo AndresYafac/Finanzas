@@ -135,8 +135,9 @@ export function Auth({ supabase, message, setMessage }) {
   const [showPassword, setShowPassword] = React.useState(false);
   const [remember, setRemember] = React.useState(nativeApp || storage.getRaw(REMEMBER_KEY) === '1');
   const [loading, setLoading] = React.useState(false);
-  const captchaSiteKey = !nativeApp ? import.meta.env.VITE_TURNSTILE_SITE_KEY : '';
-  const captchaEnabled = Boolean(captchaSiteKey) && mode !== 'reset';
+  const captchaSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
+  const captchaEnabled = Boolean(captchaSiteKey);
+  const captchaMissingConfig = !captchaSiteKey;
   const [captchaToken, setCaptchaToken] = React.useState('');
   const [captchaResetKey, setCaptchaResetKey] = React.useState(0);
   const passwordStrength = getPasswordStrength(form.password, form.email);
@@ -159,8 +160,29 @@ export function Auth({ supabase, message, setMessage }) {
           setMessage('Ingresa tu correo para enviar el enlace de recuperación.');
           return;
         }
-        const { error } = await sendPasswordReset({ supabase, email: form.email });
+        if (captchaMissingConfig) {
+          setMessage('Falta configurar VITE_TURNSTILE_SITE_KEY para validar el captcha.');
+          return;
+        }
+        if (captchaEnabled && !captchaToken) {
+          setMessage('Completa la validacion anti-bots.');
+          return;
+        }
+        const { error } = await sendPasswordReset({
+          supabase,
+          email: form.email,
+          captchaToken: captchaEnabled ? captchaToken : undefined,
+        });
+        if (captchaEnabled) {
+          setCaptchaToken('');
+          setCaptchaResetKey((current) => current + 1);
+        }
         setMessage(error ? friendlyAuthError(error) : 'Te enviamos un enlace para recuperar tu contraseña. Revisa bandeja de entrada y spam.');
+        return;
+      }
+
+      if (captchaMissingConfig) {
+        setMessage('Falta configurar VITE_TURNSTILE_SITE_KEY para validar el captcha.');
         return;
       }
 
@@ -298,6 +320,10 @@ export function Auth({ supabase, message, setMessage }) {
             onVerify={handleCaptchaVerify}
             onExpire={handleCaptchaExpire}
           />
+        ) : captchaMissingConfig ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-xs font-bold text-amber-700">
+            Falta configurar la clave publica de Turnstile para iniciar sesion.
+          </div>
         ) : null}
         <PrimaryButton disabled={loading}>
           {loading ? (mode === 'login' ? 'Ingresando...' : mode === 'reset' ? 'Enviando enlace...' : 'Creando cuenta...') : (mode === 'login' ? 'Entrar al sistema' : mode === 'reset' ? 'Enviar enlace' : 'Crear cuenta de cliente')}

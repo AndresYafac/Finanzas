@@ -214,10 +214,11 @@ export async function signUpUser({ supabase, email, password, nombre, apellido, 
   return { error, user: data?.user || null };
 }
 
-export async function sendPasswordReset({ supabase, email }) {
-  const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-    redirectTo: getAuthRedirectUrl('?recovery=1'),
-  });
+export async function sendPasswordReset({ supabase, email, captchaToken }) {
+  const options = { redirectTo: getAuthRedirectUrl('?recovery=1') };
+  if (captchaToken) options.captchaToken = captchaToken;
+
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), options);
   return { error };
 }
 
