@@ -6,6 +6,7 @@ const LOGIN_ATTEMPTS_KEY = 'fintrack_login_attempts';
 const LOGIN_LOCK_UNTIL_KEY = 'fintrack_login_locked_until';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 5 * 60 * 1000;
+const ACCOUNT_UNAVAILABLE_MESSAGE = 'La cuenta no existe, fue eliminada o esta desactivada. Contacta al administrador.';
 
 function normalizeEmail(email = '') {
   return email.trim().toLowerCase();
@@ -77,8 +78,42 @@ function clearLoginState(email) {
   storage.setJson(LOGIN_LOCK_UNTIL_KEY, locks);
 }
 
+function shouldClearRememberedAccount(email) {
+  return storage.getRaw(REMEMBER_EMAIL_KEY) === normalizeEmail(email);
+}
+
+function clearUnavailableAccountState(email) {
+  clearLoginState(email);
+  if (shouldClearRememberedAccount(email)) {
+    clearRememberedAccount();
+  }
+}
+
+async function isEmailAvailableForLogin({ supabase, email }) {
+  const emailCheck = await checkEmailRegistered({ supabase, email });
+  if (emailCheck.error) return { available: true, error: emailCheck.error };
+  return { available: emailCheck.exists, error: null };
+}
+
+async function validateAuthenticatedProfile({ supabase, userId }) {
+  if (!userId) return { available: false, error: null };
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id,activo,deleted_at')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error || !data || data.activo === false || data.deleted_at) {
+    return { available: false, error };
+  }
+
+  return { available: true, error: null };
+}
+
 export function friendlyAuthError(error) {
   const message = error?.message || '';
+  if (/account_not_available|cuenta no existe|fue eliminada|desactivada/i.test(message)) return ACCOUNT_UNAVAILABLE_MESSAGE;
   if (/correo ya est[aá] registrado|email.*registered|user already registered|already registered|email_exists/i.test(message)) return 'Este correo ya está registrado. Inicia sesión o usa recuperar contraseña.';
   if (/email not confirmed/i.test(message)) return 'Debes confirmar tu correo antes de ingresar.';
   if (/rate limit|too many|429/i.test(message)) return 'Demasiados intentos. Espera unos minutos antes de volver a intentar.';
@@ -99,6 +134,13 @@ export async function checkEmailRegistered({ supabase, email }) {
 
 export async function signInWithPassword({ supabase, email, password, remember, captchaToken }) {
   const normalizedEmail = normalizeEmail(email);
+
+  const emailAvailability = await isEmailAvailableForLogin({ supabase, email: normalizedEmail });
+  if (!emailAvailability.available) {
+    clearUnavailableAccountState(normalizedEmail);
+    return { error: { code: 'account_not_available', message: ACCOUNT_UNAVAILABLE_MESSAGE, clearRemembered: true } };
+  }
+
   const lockedUntil = getActiveLock(normalizedEmail);
   if (lockedUntil) {
     return { error: { code: 'login_locked', message: formatLockMessage(lockedUntil) } };
@@ -109,9 +151,8 @@ export async function signInWithPassword({ supabase, email, password, remember, 
 
   const { data, error } = await supabase.auth.signInWithPassword(payload);
   if (error) {
-    const rememberedEmail = storage.getRaw(REMEMBER_EMAIL_KEY);
     const isInvalidCredentials = /invalid login credentials|invalid credentials/i.test(error.message || '');
-    const shouldClearRemembered = rememberedEmail === normalizedEmail && isInvalidCredentials;
+    const shouldClearRemembered = shouldClearRememberedAccount(normalizedEmail) && isInvalidCredentials;
     if (shouldClearRemembered) {
       clearRememberedAccount();
     }
@@ -126,6 +167,14 @@ export async function signInWithPassword({ supabase, email, password, remember, 
 
     return { error: { message: friendlyAuthError(error), clearRemembered: shouldClearRemembered } };
   }
+
+  const profileAvailability = await validateAuthenticatedProfile({ supabase, userId: data?.user?.id });
+  if (!profileAvailability.available) {
+    await supabase.auth.signOut();
+    clearUnavailableAccountState(normalizedEmail);
+    return { error: { code: 'account_not_available', message: ACCOUNT_UNAVAILABLE_MESSAGE, clearRemembered: true } };
+  }
+
   clearLoginState(normalizedEmail);
 
   const shouldRemember = remember || isNativeApp();
