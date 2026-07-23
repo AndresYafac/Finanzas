@@ -65,7 +65,8 @@ npx supabase functions deploy webauthn
 1. `supabase.functions.invoke('lookup-document')`
 2. `VITE_DOCUMENT_LOOKUP_URL`, si existe
 3. `/api/documento` en produccion como respaldo de Vercel
-4. `VITE_APISPERU_TOKEN` solo para compatibilidad local
+
+No se debe usar `VITE_APISPERU_TOKEN`. Toda variable con prefijo `VITE_` queda visible en el navegador.
 
 `src/services/admin.service.js` ahora intenta eliminar usuarios con:
 
@@ -92,7 +93,7 @@ VITE_SUPABASE_URL
 VITE_SUPABASE_ANON_KEY
 ```
 
-Eliminar o dejar de usar en produccion:
+No crear ni usar:
 
 ```text
 VITE_APISPERU_TOKEN
@@ -154,7 +155,9 @@ Esta funcion solo corrige billeteras vinculadas. No recalcula saldos historicos 
 
 ## WebAuthn / Passkeys
 
-Antes de usar biometria, ejecuta:
+Estado: pendiente. Se probó, pero se retiró del flujo principal porque en algunos dispositivos Android no abría el diálogo nativo de forma confiable.
+
+Antes de retomarlo, ejecuta:
 
 ```sql
 -- Supabase SQL Editor

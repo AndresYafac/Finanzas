@@ -11,7 +11,14 @@ export function createSupabaseClient(url, key) {
     return cachedClient;
   }
   cachedSignature = signature;
-  cachedClient = createClient(cleanUrl, cleanKey);
+  cachedClient = createClient(cleanUrl, cleanKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      flowType: 'pkce',
+    },
+  });
   return cachedClient;
 }
 

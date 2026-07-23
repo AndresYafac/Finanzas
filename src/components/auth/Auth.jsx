@@ -3,11 +3,13 @@ import { Eye, EyeOff, Fingerprint, LineChart } from 'lucide-react';
 import { REMEMBER_EMAIL_KEY, REMEMBER_KEY } from '../../constants/authStorage';
 import { getCompanyConfig } from '../../config/visualConfig';
 import { friendlyAuthError, sendPasswordReset, signInWithPassword, signUpUser } from '../../controllers/auth.controller';
+import { logAuditoria } from '../../services/auditoria.service';
 import { getBiometricAvailability, isBiometricEnabled, verifyNativeBiometric } from '../../services/nativeBiometric.service';
 import { isNativeApp } from '../../services/platform.service';
 import { storage } from '../../services/storage.service';
 import { getPasswordStrength, validatePassword } from '../../utils/password';
 import { hashPin } from '../../utils/security';
+import { TurnstileCaptcha } from './TurnstileCaptcha';
 
 function initials(profile, email) {
   return ((profile?.nombre?.[0] || '') + (profile?.apellido?.[0] || '')).toUpperCase() || email?.[0]?.toUpperCase() || '?';
@@ -133,8 +135,19 @@ export function Auth({ supabase, message, setMessage }) {
   const [showPassword, setShowPassword] = React.useState(false);
   const [remember, setRemember] = React.useState(nativeApp || storage.getRaw(REMEMBER_KEY) === '1');
   const [loading, setLoading] = React.useState(false);
+  const captchaSiteKey = !nativeApp ? import.meta.env.VITE_TURNSTILE_SITE_KEY : '';
+  const captchaEnabled = Boolean(captchaSiteKey) && mode !== 'reset';
+  const [captchaToken, setCaptchaToken] = React.useState('');
+  const [captchaResetKey, setCaptchaResetKey] = React.useState(0);
   const passwordStrength = getPasswordStrength(form.password, form.email);
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const handleCaptchaVerify = React.useCallback((token) => setCaptchaToken(token), []);
+  const handleCaptchaExpire = React.useCallback(() => setCaptchaToken(''), []);
+
+  React.useEffect(() => {
+    setCaptchaToken('');
+    setCaptchaResetKey((current) => current + 1);
+  }, [mode]);
 
   async function submit(event) {
     event.preventDefault();
@@ -151,19 +164,35 @@ export function Auth({ supabase, message, setMessage }) {
         return;
       }
 
+      if (captchaEnabled && !captchaToken) {
+        setMessage('Completa la validacion anti-bots.');
+        return;
+      }
+
       if (mode === 'login') {
-        const { error } = await signInWithPassword({
+        const { error, user } = await signInWithPassword({
           supabase,
           email: form.email,
           password: form.password,
           remember: nativeApp || remember,
+          captchaToken: captchaEnabled ? captchaToken : undefined,
         });
         if (error) {
+          if (captchaEnabled) {
+            setCaptchaToken('');
+            setCaptchaResetKey((current) => current + 1);
+          }
           if (error.clearRemembered) {
             setRemember(false);
             setForm((current) => ({ ...current, email: '' }));
           }
           setMessage(friendlyAuthError(error));
+          return;
+        }
+        if (user) {
+          await logAuditoria(supabase, user.id, 'auth', 'login', 'Inicio de sesion', user.id, {
+            canal: nativeApp ? 'android' : 'web',
+          }).catch(() => {});
         }
         return;
       }
@@ -174,17 +203,27 @@ export function Auth({ supabase, message, setMessage }) {
         return;
       }
 
-      const { error } = await signUpUser({
+      const { error, user } = await signUpUser({
         supabase,
         email: form.email,
         password: form.password,
         nombre: form.nombre,
         apellido: form.apellido,
+        captchaToken: captchaEnabled ? captchaToken : undefined,
       });
       if (error) {
+        if (captchaEnabled) {
+          setCaptchaToken('');
+          setCaptchaResetKey((current) => current + 1);
+        }
         const rateLimited = error.status === 429 || /rate limit|email rate/i.test(error.message);
         setMessage(rateLimited ? 'Supabase alcanzó el límite temporal de correos. Espera o configura SMTP propio.' : friendlyAuthError(error));
       } else {
+        if (user) {
+          await logAuditoria(supabase, user.id, 'auth', 'register', 'Registro de usuario', user.id, {
+            email: form.email,
+          }).catch(() => {});
+        }
         setMessage('Correo de confirmación enviado. Revisa bandeja de entrada y spam.');
       }
     } catch (error) {
@@ -252,6 +291,14 @@ export function Auth({ supabase, message, setMessage }) {
             <span>Recordar correo en este navegador</span>
           </label>
         )}
+        {captchaEnabled ? (
+          <TurnstileCaptcha
+            siteKey={captchaSiteKey}
+            resetKey={captchaResetKey}
+            onVerify={handleCaptchaVerify}
+            onExpire={handleCaptchaExpire}
+          />
+        ) : null}
         <PrimaryButton disabled={loading}>
           {loading ? (mode === 'login' ? 'Ingresando...' : mode === 'reset' ? 'Enviando enlace...' : 'Creando cuenta...') : (mode === 'login' ? 'Entrar al sistema' : mode === 'reset' ? 'Enviar enlace' : 'Crear cuenta de cliente')}
         </PrimaryButton>

@@ -1,4 +1,5 @@
 ﻿import React from 'react';
+import { createPortal } from 'react-dom';
 import {
   Check,
   ChevronDown,
@@ -19,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { confirmAction, notify } from '../../services/feedback';
+import { logAuditoria } from '../../services/auditoria.service';
 import {
   deleteAdminUser,
   listAdminUsers,
@@ -218,7 +220,8 @@ function StatusBadge({ tone = 'gray', children }) {
 function TailwindModal({ open, title, onClose, children, size = 'xl' }) {
   if (!open) return null;
   const maxWidth = size === 'wide' ? 'max-w-6xl' : 'max-w-3xl';
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/55 p-4">
       <div className={`flex max-h-[92vh] w-full ${maxWidth} flex-col overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-200`}>
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
@@ -229,7 +232,8 @@ function TailwindModal({ open, title, onClose, children, size = 'xl' }) {
         </div>
         <div className="overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -352,6 +356,11 @@ export function UsuariosAdmin({ supabase, user }) {
       p_role: form.role,
     });
     if (error) return notify(error.message);
+    const label = [form.nombre, form.apellido].filter(Boolean).join(' ') || form.email_auth || editingId;
+    await logAuditoria(supabase, user.id, 'profiles', 'update', `Usuario actualizado: ${label}`, editingId, {
+      email: form.email_auth,
+      role: form.role,
+    }).catch(() => {});
     notify('Usuario actualizado correctamente.', 'success');
     setOpen(false);
     setEditingId(null);
@@ -364,6 +373,9 @@ export function UsuariosAdmin({ supabase, user }) {
     if (!(await confirmAction(`${next ? 'Activar' : 'Desactivar'} usuario ${row.email_auth || row.email_contacto || row.nombre || ''}?`))) return;
     const { error } = await updateAdminUserState(supabase, row.id, next);
     if (error) return notify(error.message);
+    await logAuditoria(supabase, user.id, 'profiles', 'update', `${next ? 'Usuario activado' : 'Usuario desactivado'}: ${row.email_auth || row.email_contacto || row.nombre || row.id}`, row.id, {
+      activo: next,
+    }).catch(() => {});
     notify(next ? 'Usuario activado.' : 'Usuario desactivado.', 'success');
     load();
   }
@@ -373,6 +385,10 @@ export function UsuariosAdmin({ supabase, user }) {
     if (!(await confirmAction(`Eliminar definitivamente el usuario ${row.email_auth || row.email_contacto || row.nombre || ''}? Esta accion borrara su cuenta de acceso y no se puede deshacer.`))) return;
     const { error } = await deleteAdminUser(supabase, row.id);
     if (error) return notify(error.message);
+    await logAuditoria(supabase, user.id, 'profiles', 'delete', `Usuario eliminado: ${row.email_auth || row.email_contacto || row.nombre || row.id}`, row.id, {
+      email: row.email_auth || row.email_contacto || null,
+      role: row.role,
+    }).catch(() => {});
     notify('Usuario eliminado definitivamente.', 'success');
     load();
   }
@@ -438,6 +454,9 @@ export function UsuariosAdmin({ supabase, user }) {
     }));
     const { error } = await saveUserPermissions(supabase, payload);
     if (error) return notify(error.message);
+    await logAuditoria(supabase, user.id, 'user_permissions', 'update', `Permisos actualizados: ${permissionsUser.email_auth || permissionsUser.email_contacto || permissionsUser.nombre || permissionsUser.id}`, permissionsUser.id, {
+      total: payload.length,
+    }).catch(() => {});
     notify('Permisos actualizados.', 'success');
     setPermissionsOpen(false);
   }

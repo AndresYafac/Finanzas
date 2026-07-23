@@ -33,6 +33,7 @@ import { usePermissions } from './hooks/usePermissions';
 import { useVisualConfig } from './hooks/useVisualConfig';
 import { clearFeedbackHandlers, confirmAction, hideBusy, notify, setFeedbackHandlers, showBusy } from './services/feedback';
 import { getProfile } from './services/admin.service';
+import { logAuditoria } from './services/auditoria.service';
 import { listInternalNotifications, syncAutomaticNotifications } from './services/notificationsCenter.service';
 import { autoRegisterPushDevice, isNativePushSupported } from './services/push.service';
 import { globalSearch } from './services/search.service';
@@ -322,6 +323,9 @@ export function App() {
       window.clearTimeout(warningTimer);
       warningTimer = window.setTimeout(() => notify('Tu sesion se cerrara en 1 minuto por inactividad.', 'warning'), INACTIVITY_TIMEOUT_MS - INACTIVITY_WARNING_MS);
       logoutTimer = window.setTimeout(async () => {
+        await logAuditoria(supabase, session.user.id, 'auth', 'logout', 'Cierre de sesion por inactividad', session.user.id, {
+          motivo: 'inactividad',
+        }).catch(() => {});
         await supabase.auth.signOut();
         storage.remove(LOCKED_KEY);
         setSession(null);
@@ -390,6 +394,9 @@ export function App() {
       setLocked(false);
     }} onFullLogout={async () => {
       clearRememberedAccount();
+      await logAuditoria(supabase, session.user.id, 'auth', 'logout', 'Cierre de sesion completa desde bloqueo', session.user.id, {
+        motivo: 'full_logout_locked',
+      }).catch(() => {});
       await supabase.auth.signOut();
       setSession(null);
       setProfile(null);
@@ -443,6 +450,9 @@ export function App() {
       setLocked(true);
       return;
     }
+    await logAuditoria(supabase, session.user.id, 'auth', 'logout', 'Cierre de sesion manual', session.user.id, {
+      motivo: 'manual',
+    }).catch(() => {});
     await supabase.auth.signOut();
     storage.remove(LOCKED_KEY);
     setSession(null);

@@ -15,10 +15,6 @@ function resolveLookupUrl(tipo, documento) {
   if (import.meta.env.PROD) {
     return `/api/documento?tipo=${encodeURIComponent(inferredType)}&documento=${encodeURIComponent(normalizedDoc)}`;
   }
-  const apiPeruToken = import.meta.env.VITE_APISPERU_TOKEN || '';
-  if (apiPeruToken && ['dni', 'ruc'].includes(inferredType)) {
-    return `https://dniruc.apisperu.com/api/v1/${inferredType}/${encodeURIComponent(normalizedDoc)}?token=${encodeURIComponent(apiPeruToken)}`;
-  }
   return '';
 }
 
@@ -66,7 +62,7 @@ export async function lookupDocument({ tipo, documento }) {
 
   const url = resolveLookupUrl(tipo, documento);
   if (!url) {
-    return { error: 'Configura APISPERU_TOKEN como secret de Supabase para habilitar la busqueda de documentos.' };
+    return { error: 'Configura APISPERU_TOKEN como secret de Supabase o VITE_DOCUMENT_LOOKUP_URL con un proxy privado para habilitar la busqueda de documentos.' };
   }
   try {
     const response = await fetch(url, { headers: { accept: 'application/json' } });
